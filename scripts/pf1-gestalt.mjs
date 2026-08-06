@@ -202,8 +202,7 @@ function enhanceGestaltPage(app, element, actor) {
 
   link.addEventListener("click", (event) => {
     event.preventDefault();
-    for (const item of navigation.querySelectorAll(".item")) item.classList.toggle("active", item === link);
-    for (const tab of body.querySelectorAll(".tab[data-group='primary']")) tab.classList.toggle("active", tab === page);
+    activateGestaltPage(app, navigation, body, link, page);
   });
   for (const item of navigation.querySelectorAll(".item:not([data-tab='gestalt'])")) {
     item.addEventListener("click", () => {
@@ -211,10 +210,18 @@ function enhanceGestaltPage(app, element, actor) {
       page.classList.remove("active");
     });
   }
-  if (reactivateGestaltTab.delete(app)) activateGestaltPage(navigation, body, link, page);
+  if (reactivateGestaltTab.delete(app)) activateGestaltPage(app, navigation, body, link, page);
 }
 
-function activateGestaltPage(navigation, body, link, page) {
+function activateGestaltPage(app, navigation, body, link, page) {
+  const tabs = app._tabs?.find((controller) => controller.group === "primary");
+  if (typeof tabs?.activate === "function") {
+    tabs.activate("gestalt");
+    return;
+  }
+
+  // Compatibility fallback for sheet implementations without a V1 Tabs
+  // controller. PF1e v11 normally uses the controller path above.
   for (const item of navigation.querySelectorAll(".item")) item.classList.toggle("active", item === link);
   for (const tab of body.querySelectorAll(".tab[data-group='primary']")) tab.classList.toggle("active", tab === page);
 }
