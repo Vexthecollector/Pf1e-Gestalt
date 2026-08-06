@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   createLevelArray,
   normalizeLevelArray,
+  reconcileLevelArray,
   swapLevelAssignments,
 } from "../scripts/gestalt-levels.mjs";
 
@@ -82,5 +83,42 @@ test("rejects swaps between main and secondary tracks", () => {
   assert.deepEqual(
     swapLevelAssignments(levels, { index: 0, track: "main" }, { index: 1, track: "secondary" }),
     levels,
+  );
+});
+
+test("adds a new class level to the first open slot without rebuilding order", () => {
+  const levels = [
+    { level: 1, mainClassId: "rogue", secondaryClassId: "wizard" },
+    { level: 2, mainClassId: "fighter", secondaryClassId: null },
+  ];
+  assert.deepEqual(
+    reconcileLevelArray(levels, [
+      cls("fighter", 1, "main"),
+      cls("rogue", 1, "main"),
+      cls("wizard", 2, "secondary"),
+    ]),
+    [
+      { level: 1, mainClassId: "rogue", secondaryClassId: "wizard" },
+      { level: 2, mainClassId: "fighter", secondaryClassId: "wizard" },
+    ],
+  );
+});
+
+test("removes the last matching slot when a class loses a level", () => {
+  const levels = [
+    { level: 1, mainClassId: "fighter", secondaryClassId: "wizard" },
+    { level: 2, mainClassId: "rogue", secondaryClassId: "wizard" },
+    { level: 3, mainClassId: "fighter", secondaryClassId: null },
+  ];
+  assert.deepEqual(
+    reconcileLevelArray(levels, [
+      cls("fighter", 1, "main"),
+      cls("rogue", 1, "main"),
+      cls("wizard", 2, "secondary"),
+    ]),
+    [
+      { level: 1, mainClassId: "fighter", secondaryClassId: "wizard" },
+      { level: 2, mainClassId: "rogue", secondaryClassId: "wizard" },
+    ],
   );
 });

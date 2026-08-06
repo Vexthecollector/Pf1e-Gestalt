@@ -64,3 +64,50 @@ export function swapLevelAssignments(value, source, target) {
   targetRow[targetKey] = held;
   return normalizeLevelArray(levels);
 }
+
+/**
+ * Match stored slots to current class levels without discarding the player's
+ * level ordering. Missing levels fill the first open slot on their track.
+ */
+export function reconcileLevelArray(value, classes) {
+  const levels = normalizeLevelArray(value);
+  const keys = { [TRACK.MAIN]: "mainClassId", [TRACK.SECONDARY]: "secondaryClassId" };
+  const desired = { [TRACK.MAIN]: new Map(), [TRACK.SECONDARY]: new Map() };
+
+  for (const item of classes.filter((entry) => !isFixedClass(entry))) {
+    desired[getTrack(item)].set(item.id, Math.max(0, Number(item.system?.level) || 0));
+  }
+
+  for (const track of [TRACK.MAIN, TRACK.SECONDARY]) {
+    const key = keys[track];
+    const actual = new Map();
+    for (const row of levels) {
+      if (row[key]) actual.set(row[key], (actual.get(row[key]) ?? 0) + 1);
+    }
+
+    for (const [id, count] of actual) {
+      let excess = count - (desired[track].get(id) ?? 0);
+      for (let index = levels.length - 1; excess > 0 && index >= 0; index--) {
+        if (levels[index][key] === id) {
+          levels[index][key] = null;
+          excess -= 1;
+        }
+      }
+    }
+
+    for (const [id, count] of desired[track]) {
+      const current = levels.reduce((sum, row) => sum + (row[key] === id ? 1 : 0), 0);
+      for (let missing = count - current; missing > 0; missing--) {
+        let row = levels.find((entry) => !entry[key]);
+        if (!row) {
+          row = { level: levels.length + 1, mainClassId: null, secondaryClassId: null };
+          levels.push(row);
+        }
+        row[key] = id;
+      }
+    }
+  }
+
+  while (levels.length && !levels.at(-1).mainClassId && !levels.at(-1).secondaryClassId) levels.pop();
+  return normalizeLevelArray(levels);
+}

@@ -10,6 +10,7 @@ import {
   createLevelArray,
   LEVELS_FLAG,
   normalizeLevelArray,
+  reconcileLevelArray,
   swapLevelAssignments,
 } from "./gestalt-levels.mjs";
 
@@ -43,7 +44,7 @@ Hooks.on("updateItem", async (item, changes) => {
   if (item.type !== "class" || item.parent?.type !== "character") return;
   const trackChanged = foundry.utils.hasProperty(changes, FLAG_PATH);
   const levelChanged = foundry.utils.hasProperty(changes, "system.level");
-  if (trackChanged || levelChanged) await synchronizeLevelArray(item.parent);
+  if (trackChanged || levelChanged) await synchronizeLevelArray(item.parent, { preserveOrder: levelChanged });
 });
 
 async function ensureLevelArray(actor) {
@@ -173,6 +174,35 @@ function enhanceCharacterSheet(app, element, actor) {
     });
     details.append(select);
     insertTrackDetails(row, details);
+  }
+  addCatchUpLevelButtons(app, classesBody, actor);
+}
+
+function addCatchUpLevelButtons(app, classesBody, actor) {
+  if (!actor.isOwner) return;
+  const eligible = actor.itemTypes.class.filter((item) => !isFixedClass(item));
+  const totals = {
+    [TRACK.MAIN]: eligible
+      .filter((item) => getTrack(item) === TRACK.MAIN)
+      .reduce((sum, item) => sum + (Number(item.system?.level) || 0), 0),
+    [TRACK.SECONDARY]: eligible
+      .filter((item) => getTrack(item) === TRACK.SECONDARY)
+      .reduce((sum, item) => sum + (Number(item.system?.level) || 0), 0),
+  };
+  if (totals[TRACK.MAIN] === totals[TRACK.SECONDARY]) return;
+  const lowerTrack = totals[TRACK.MAIN] < totals[TRACK.SECONDARY] ? TRACK.MAIN : TRACK.SECONDARY;
+
+  for (const item of eligible.filter((entry) => getTrack(entry) === lowerTrack)) {
+    const row = classesBody.querySelector(`.item[data-item-id="${CSS.escape(item.id)}"]`);
+    const cell = row?.querySelector(".item-button");
+    if (!cell || cell.querySelector(".level-up")) continue;
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "level-up pf1-gestalt-catch-up";
+    button.dataset.itemId = item.id;
+    button.textContent = localize("PF1.LevelUp.Action");
+    button.addEventListener("click", (event) => app._onLevelUp(event));
+    cell.append(button);
   }
 }
 
@@ -664,8 +694,12 @@ async function updateClassTrack(item, track) {
   await synchronizeLevelArray(actor);
 }
 
-async function synchronizeLevelArray(actor) {
-  await actor.setFlag(MODULE_ID, LEVELS_FLAG, createLevelArray(actor.itemTypes?.class ?? []));
+async function synchronizeLevelArray(actor, { preserveOrder = false } = {}) {
+  const classes = actor.itemTypes?.class ?? [];
+  const levels = preserveOrder
+    ? reconcileLevelArray(actor.getFlag(MODULE_ID, LEVELS_FLAG), classes)
+    : createLevelArray(classes);
+  await actor.setFlag(MODULE_ID, LEVELS_FLAG, levels);
 }
 
 function localize(key) {
