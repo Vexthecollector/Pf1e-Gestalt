@@ -8,5 +8,6 @@
   "PF1GESTALT.Level.ClassLevel": "Class Level {level}",
   "PF1GESTALT.Level.Unassigned": "Unassigned",
   "PF1GESTALT.Level.Statistics": "Statistics Gained",
-  "PF1GESTALT.Level.HitDie": "Hit Die"
+  "PF1GESTALT.Level.HitDie": "Hit Die",
+  "PF1GESTALT.LevelUp.CatchUpASI": "This level catches up the lower gestalt track and does not increase the character's total level, so it grants no additional ability score increase."
 }

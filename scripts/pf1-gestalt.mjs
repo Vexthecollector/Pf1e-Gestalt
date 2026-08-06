@@ -71,7 +71,10 @@ function applyGestaltProgression(actor) {
   if (actor.type !== "character") return;
 
   const classes = [...(actor.itemTypes?.class ?? [])];
-  const levels = normalizeLevelArray(actor.getFlag(MODULE_ID, LEVELS_FLAG));
+  // LevelUpForm previews changes on a temporary actor via updateSource(),
+  // which does not fire updateItem. Reconcile locally so that preview actor
+  // calculations include the prospective gestalt slot.
+  const levels = reconcileLevelArray(actor.getFlag(MODULE_ID, LEVELS_FLAG), classes);
   if (!levels.some((row) => row.secondaryClassId)) return;
 
   const fractional = useFractionalProgression();
@@ -116,6 +119,36 @@ for (const hook of [
   "renderItemSheet",
 ]) {
   Hooks.on(hook, enhanceRenderedSheet);
+}
+
+Hooks.on("renderLevelUpForm", adjustGestaltLevelUpForm);
+
+function adjustGestaltLevelUpForm(app, html) {
+  const actor = app.actor;
+  const item = app.item;
+  if (actor?.type !== "character" || item?.type !== "class" || isFixedClass(item)) return;
+  const lowerTrack = lowerGestaltTrack(actor);
+  if (!lowerTrack || getTrack(item) !== lowerTrack) return;
+
+  // PF1e looks up ASIs from the preview actor's total HD without checking
+  // whether HD actually increased. A catch-up level fills an existing gestalt
+  // row, so suppress that repeated milestone reward.
+  app.config.abilityScore.new = 0;
+  app.config.abilityScore.used = 0;
+  for (const ability of Object.values(app.config.abilityScore.upgrades ?? {})) ability.added = 0;
+
+  const element = rootElement(html, app);
+  const segment = element?.querySelector(".segment.ability-score");
+  if (segment) {
+    const heading = document.createElement("h2");
+    heading.textContent = localize("PF1.LevelUp.AbilityScore.Label");
+    const note = document.createElement("p");
+    note.className = "info pf1-gestalt-catch-up-note";
+    note.textContent = localize("PF1GESTALT.LevelUp.CatchUpASI");
+    segment.replaceChildren(heading, note);
+  }
+  const submit = element?.querySelector("button[type='submit'][data-action='commit']");
+  if (submit && typeof app.isReady === "function") submit.disabled = !app.isReady();
 }
 
 function enhanceRenderedSheet(app, html) {
@@ -181,16 +214,8 @@ function enhanceCharacterSheet(app, element, actor) {
 function addCatchUpLevelButtons(app, classesBody, actor) {
   if (!actor.isOwner) return;
   const eligible = actor.itemTypes.class.filter((item) => !isFixedClass(item));
-  const totals = {
-    [TRACK.MAIN]: eligible
-      .filter((item) => getTrack(item) === TRACK.MAIN)
-      .reduce((sum, item) => sum + (Number(item.system?.level) || 0), 0),
-    [TRACK.SECONDARY]: eligible
-      .filter((item) => getTrack(item) === TRACK.SECONDARY)
-      .reduce((sum, item) => sum + (Number(item.system?.level) || 0), 0),
-  };
-  if (totals[TRACK.MAIN] === totals[TRACK.SECONDARY]) return;
-  const lowerTrack = totals[TRACK.MAIN] < totals[TRACK.SECONDARY] ? TRACK.MAIN : TRACK.SECONDARY;
+  const lowerTrack = lowerGestaltTrack(actor);
+  if (!lowerTrack) return;
 
   for (const item of eligible.filter((entry) => getTrack(entry) === lowerTrack)) {
     const row = classesBody.querySelector(`.item[data-item-id="${CSS.escape(item.id)}"]`);
@@ -204,6 +229,17 @@ function addCatchUpLevelButtons(app, classesBody, actor) {
     button.addEventListener("click", (event) => app._onLevelUp(event));
     cell.append(button);
   }
+}
+
+function lowerGestaltTrack(actor) {
+  const eligible = actor.itemTypes.class.filter((item) => !isFixedClass(item));
+  const total = (track) => eligible
+    .filter((item) => getTrack(item) === track)
+    .reduce((sum, item) => sum + (Number(item.system?.level) || 0), 0);
+  const main = total(TRACK.MAIN);
+  const secondary = total(TRACK.SECONDARY);
+  if (main === secondary) return null;
+  return main < secondary ? TRACK.MAIN : TRACK.SECONDARY;
 }
 
 function calculateArrayProgression(actor, classes, levels, fractional) {
