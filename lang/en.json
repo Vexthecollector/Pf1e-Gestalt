@@ -2,5 +2,11 @@
   "PF1GESTALT.Track.Label": "Gestalt Track",
   "PF1GESTALT.Track.Main": "Main Class",
   "PF1GESTALT.Track.Secondary": "Secondary Class",
-  "PF1GESTALT.Track.Fixed": "Fixed Class"
+  "PF1GESTALT.Track.Fixed": "Fixed Class",
+  "PF1GESTALT.Tab.Label": "Gestalt",
+  "PF1GESTALT.Level.Label": "Gestalt Level {level}",
+  "PF1GESTALT.Level.ClassLevel": "Class Level {level}",
+  "PF1GESTALT.Level.Unassigned": "Unassigned",
+  "PF1GESTALT.Level.Statistics": "Statistics Gained",
+  "PF1GESTALT.Level.HitDie": "Hit Die"
 }

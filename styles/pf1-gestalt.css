@@ -56,3 +56,54 @@
   margin-bottom: 0.5rem;
   padding: 0.5rem;
 }
+
+.pf1.sheet.actor.character .sheet-navigation {
+  flex-wrap: wrap;
+  height: auto;
+}
+
+.pf1-gestalt-page {
+  overflow: auto;
+}
+
+.pf1-gestalt-level-groups,
+.pf1-gestalt-level-list {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 0;
+}
+
+.pf1-gestalt-level-list + .pf1-gestalt-level-list {
+  margin-top: 0.5rem;
+}
+
+.pf1-gestalt-class-level-row,
+.pf1-gestalt-statistics-row {
+  align-items: center;
+  min-height: 2.25rem;
+}
+
+.pf1-gestalt-class-level-row[draggable="true"] {
+  cursor: grab;
+}
+
+.pf1-gestalt-class-level-row.pf1-gestalt-dragging {
+  opacity: 0.45;
+}
+
+.pf1-gestalt-class-level-row.pf1-gestalt-drop-target {
+  box-shadow: inset 0 0 0 2px #6f4d8e;
+}
+
+.pf1-gestalt-page-track {
+  flex: 0 0 8rem !important;
+}
+
+.pf1-gestalt-statistics-row .item-name {
+  font-weight: bold;
+}
+
+.pf1-gestalt-stat-cell {
+  flex: 0 0 4rem !important;
+  text-align: center;
+}
