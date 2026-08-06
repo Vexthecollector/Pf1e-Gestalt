@@ -54,6 +54,7 @@ export function swapLevelAssignments(value, source, target) {
   const keys = { main: "mainClassId", secondary: "secondaryClassId" };
   const sourceKey = keys[source?.track];
   const targetKey = keys[target?.track];
+  if (source?.track !== target?.track) return levels;
   const sourceRow = levels[Number(source?.index)];
   const targetRow = levels[Number(target?.index)];
   if (!sourceKey || !targetKey || !sourceRow || !targetRow) return levels;

@@ -14,6 +14,8 @@ import {
 
 const MODULE_ID = "pf1-gestalt";
 const FLAG_PATH = `flags.${MODULE_ID}.track`;
+const reactivateGestaltTab = new WeakSet();
+let draggedGestaltSlot = null;
 
 Hooks.once("init", () => {
   console.info("PF1e Gestalt | Initializing main and secondary class tracks");
@@ -209,6 +211,12 @@ function enhanceGestaltPage(app, element, actor) {
       page.classList.remove("active");
     });
   }
+  if (reactivateGestaltTab.delete(app)) activateGestaltPage(navigation, body, link, page);
+}
+
+function activateGestaltPage(navigation, body, link, page) {
+  for (const item of navigation.querySelectorAll(".item")) item.classList.toggle("active", item === link);
+  for (const tab of body.querySelectorAll(".tab[data-group='primary']")) tab.classList.toggle("active", tab === page);
 }
 
 function buildGestaltLevel(app, actor, level, classLevels) {
@@ -273,14 +281,19 @@ function activateGestaltDragAndDrop(row, app, actor) {
     event.stopPropagation();
     row.classList.add("pf1-gestalt-dragging");
     event.dataTransfer.effectAllowed = "move";
-    event.dataTransfer.setData("text/plain", JSON.stringify({
+    draggedGestaltSlot = {
       type: "pf1-gestalt-slot",
       index: Number(row.dataset.gestaltLevelIndex),
       track: row.dataset.gestaltTrack,
-    }));
+    };
+    event.dataTransfer.setData("text/plain", JSON.stringify(draggedGestaltSlot));
   });
-  row.addEventListener("dragend", () => row.classList.remove("pf1-gestalt-dragging"));
+  row.addEventListener("dragend", () => {
+    draggedGestaltSlot = null;
+    row.classList.remove("pf1-gestalt-dragging");
+  });
   row.addEventListener("dragover", (event) => {
+    if (draggedGestaltSlot?.track !== row.dataset.gestaltTrack) return;
     event.preventDefault();
     event.stopPropagation();
     event.dataTransfer.dropEffect = "move";
@@ -303,8 +316,10 @@ function activateGestaltDragAndDrop(row, app, actor) {
       index: Number(row.dataset.gestaltLevelIndex),
       track: row.dataset.gestaltTrack,
     };
+    if (source.track !== target.track) return;
     const current = actor.getFlag(MODULE_ID, LEVELS_FLAG);
     await actor.setFlag(MODULE_ID, LEVELS_FLAG, swapLevelAssignments(current, source, target));
+    reactivateGestaltTab.add(app);
     renderApp(app);
   });
 }

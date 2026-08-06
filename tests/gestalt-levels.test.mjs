@@ -52,24 +52,35 @@ test("swaps classes between gestalt level slots", () => {
     { level: 2, mainClassId: "rogue", secondaryClassId: "cleric" },
   ];
   assert.deepEqual(
-    swapLevelAssignments(levels, { index: 0, track: "main" }, { index: 1, track: "secondary" }),
+    swapLevelAssignments(levels, { index: 0, track: "main" }, { index: 1, track: "main" }),
     [
-      { level: 1, mainClassId: "cleric", secondaryClassId: "wizard" },
-      { level: 2, mainClassId: "rogue", secondaryClassId: "fighter" },
+      { level: 1, mainClassId: "rogue", secondaryClassId: "wizard" },
+      { level: 2, mainClassId: "fighter", secondaryClassId: "cleric" },
     ],
   );
 });
 
 test("dropping onto an empty slot moves the class", () => {
   const levels = [
-    { level: 1, mainClassId: "fighter", secondaryClassId: null },
-    { level: 2, mainClassId: "rogue", secondaryClassId: "wizard" },
+    { level: 1, mainClassId: "fighter", secondaryClassId: "wizard" },
+    { level: 2, mainClassId: null, secondaryClassId: "cleric" },
   ];
   assert.deepEqual(
-    swapLevelAssignments(levels, { index: 0, track: "main" }, { index: 0, track: "secondary" }),
+    swapLevelAssignments(levels, { index: 0, track: "main" }, { index: 1, track: "main" }),
     [
-      { level: 1, mainClassId: null, secondaryClassId: "fighter" },
-      { level: 2, mainClassId: "rogue", secondaryClassId: "wizard" },
+      { level: 1, mainClassId: null, secondaryClassId: "wizard" },
+      { level: 2, mainClassId: "fighter", secondaryClassId: "cleric" },
     ],
+  );
+});
+
+test("rejects swaps between main and secondary tracks", () => {
+  const levels = [
+    { level: 1, mainClassId: "fighter", secondaryClassId: "wizard" },
+    { level: 2, mainClassId: "rogue", secondaryClassId: "cleric" },
+  ];
+  assert.deepEqual(
+    swapLevelAssignments(levels, { index: 0, track: "main" }, { index: 1, track: "secondary" }),
+    levels,
   );
 });
