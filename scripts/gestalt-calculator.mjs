@@ -118,3 +118,43 @@ export function calculateGestaltHealth(classes, healthConfig, actorType = "chara
   const secondaryHealth = calculateClassHealth([...fixed, ...secondary], healthConfig, actorType);
   return { standard, gestalt: Math.max(mainHealth, secondaryHealth), main: mainHealth, secondary: secondaryHealth };
 }
+
+/**
+ * Calculate progression by choosing the better gain in every stored gestalt
+ * row. The callback receives the class item and its occurrence-based class
+ * level, allowing Foundry's configured formulas to remain the authority.
+ */
+export function calculateGestaltLevelProgression(
+  levels,
+  { getItem, getStats, fixedStats = [] },
+) {
+  const totals = { level: 0, hitDice: 0, bab: 0, saves: { fort: 0, ref: 0, will: 0 } };
+  const occurrences = new Map();
+  const advance = (item) => {
+    if (!item) return null;
+    const level = (occurrences.get(item.id) ?? 0) + 1;
+    occurrences.set(item.id, level);
+    return getStats(item, level);
+  };
+
+  for (const row of levels) {
+    const main = getItem(row.mainClassId) ?? null;
+    const secondary = getItem(row.secondaryClassId) ?? null;
+    if (!main && !secondary) continue;
+    const mainStats = advance(main) ?? { hd: 0, bab: 0, fort: 0, ref: 0, will: 0 };
+    const secondaryStats = advance(secondary) ?? { hd: 0, bab: 0, fort: 0, ref: 0, will: 0 };
+    totals.level += 1;
+    totals.hitDice += Math.max(mainStats.hitDice ?? 1, secondaryStats.hitDice ?? 1);
+    totals.bab += Math.max(Number(mainStats.bab) || 0, Number(secondaryStats.bab) || 0);
+    for (const save of ["fort", "ref", "will"]) {
+      totals.saves[save] += Math.max(Number(mainStats[save]) || 0, Number(secondaryStats[save]) || 0);
+    }
+  }
+
+  for (const stats of fixedStats) {
+    totals.hitDice += Number(stats.hitDice) || 0;
+    totals.bab += Number(stats.bab) || 0;
+    for (const save of ["fort", "ref", "will"]) totals.saves[save] += Number(stats[save]) || 0;
+  }
+  return totals;
+}

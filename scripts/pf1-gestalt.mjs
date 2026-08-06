@@ -1,6 +1,7 @@
 import {
-  calculateGestaltHealth,
-  calculateGestaltProgression,
+  calculateClassHealth,
+  calculateGestaltLevelProgression,
+  getClassSubtype,
   getTrack,
   isFixedClass,
   TRACK,
@@ -69,15 +70,15 @@ function applyGestaltProgression(actor) {
   if (actor.type !== "character") return;
 
   const classes = [...(actor.itemTypes?.class ?? [])];
-  if (!classes.some((item) => getTrack(item) === TRACK.SECONDARY)) return;
+  const levels = normalizeLevelArray(actor.getFlag(MODULE_ID, LEVELS_FLAG));
+  if (!levels.some((row) => row.secondaryClassId)) return;
 
-  const result = calculateGestaltProgression(classes, {
-    fractional: useFractionalProgression(),
-  });
+  const fractional = useFractionalProgression();
+  const result = calculateArrayProgression(actor, classes, levels, fractional);
   if (!result.active) return;
 
   const healthConfig = game.settings.get("pf1", "healthConfig");
-  const health = calculateGestaltHealth(classes, healthConfig, actor.type);
+  const health = calculateArrayHealth(actor, classes, levels, healthConfig);
   const classHealthAdjustment = health.gestalt - health.standard;
   const hdAdjustment = result.hitDice - result.standard.hitDice;
   const hpAbility = actor.system.attributes.hpAbility;
@@ -173,6 +174,147 @@ function enhanceCharacterSheet(app, element, actor) {
     details.append(select);
     insertTrackDetails(row, details);
   }
+}
+
+function calculateArrayProgression(actor, classes, levels, fractional) {
+  const fixed = classes.filter(isFixedClass);
+  const totals = calculateGestaltLevelProgression(levels, {
+    getItem: (id) => actor.items.get(id),
+    getStats: (item, level) => ({
+      ...classLevelStatistics(item, level, false),
+      hitDice: 1,
+    }),
+    fixedStats: fixed.map((item) => ({
+      hitDice: Number(item.hitDice ?? item.system?.hitDice) || 0,
+      bab: Number(item.system?.babBase) || 0,
+      fort: Number(item.system?.savingThrows?.fort?.base) || 0,
+      ref: Number(item.system?.savingThrows?.ref?.base) || 0,
+      will: Number(item.system?.savingThrows?.will?.base) || 0,
+    })),
+  });
+
+  for (const save of ["fort", "ref", "will"]) {
+    if (fractional && hasGoodFractionalSave(actor, levels, fixed, save)) {
+      totals.saves[save] += fractionalGoodSaveBonus();
+    }
+    totals.saves[save] = fractional ? Math.floor(totals.saves[save]) : totals.saves[save];
+  }
+  totals.bab = Math.floor(totals.bab);
+
+  const standardEligible = classes.filter((item) => !isFixedClass(item));
+  const standard = {
+    level: standardEligible.reduce((sum, item) => sum + (Number(item.system?.level) || 0), 0),
+    hitDice: classes.reduce((sum, item) => sum + (Number(item.hitDice ?? item.system?.hitDice) || 0), 0),
+    bab: Math.floor(classes.reduce((sum, item) => sum + (Number(item.system?.babBase) || 0), 0)),
+    saves: {},
+  };
+  for (const save of ["fort", "ref", "will"]) {
+    let value = classes.reduce(
+      (sum, item) => sum + (Number(item.system?.savingThrows?.[save]?.base) || 0),
+      0,
+    );
+    if (fractional && classes.some((item) => item.system?.savingThrows?.[save]?.good === true)) {
+      value += fractionalGoodSaveBonus();
+    }
+    standard.saves[save] = fractional ? Math.floor(value) : value;
+  }
+
+  return { active: levels.some((row) => row.secondaryClassId), ...totals, standard };
+}
+
+function hasGoodFractionalSave(actor, levels, fixed, save) {
+  const ids = new Set();
+  for (const row of levels) {
+    if (row.mainClassId) ids.add(row.mainClassId);
+    if (row.secondaryClassId) ids.add(row.secondaryClassId);
+  }
+  return [...fixed, ...[...ids].map((id) => actor.items.get(id)).filter(Boolean)]
+    .some((item) => item.system?.savingThrows?.[save]?.good === true);
+}
+
+function fractionalGoodSaveBonus() {
+  const formula = pf1.config.classFractionalSavingThrowFormulas?.goodSaveBonus ?? "2";
+  return Number(pf1.dice.RollPF.safeRollSync(formula).total) || 0;
+}
+
+function calculateArrayHealth(actor, classes, levels, healthConfig) {
+  const standard = calculateClassHealth(classes, healthConfig, actor.type);
+  const actorConfig = healthConfig.getActorConfig(actor.type);
+  const round = { up: Math.ceil, nearest: Math.round, down: Math.floor }[healthConfig.rounding] ?? Math.round;
+  const state = { remainingMaximized: Math.max(0, Number(healthConfig.maximized) || 0) };
+  let gestalt = 0;
+
+  // PF1e processes racial hit dice before ordinary class hit dice. Mythic
+  // paths are also fixed and remain additive rather than occupying a slot.
+  const fixed = classes.filter(isFixedClass).sort((a, b) => {
+    const priority = (item) => getClassSubtype(item) === "racial" ? 0 : 1;
+    return priority(a) - priority(b);
+  });
+  for (const item of fixed) {
+    gestalt += fixedClassHealth(item, healthConfig, actorConfig, state, round);
+  }
+
+  const occurrences = new Map();
+  for (const row of levels) {
+    const main = actor.items.get(row.mainClassId) ?? null;
+    const secondary = actor.items.get(row.secondaryClassId) ?? null;
+    if (!main && !secondary) continue;
+    const mainHealth = levelHealth(main, nextClassLevel(occurrences, main), healthConfig, actorConfig, state, round);
+    const secondaryHealth = levelHealth(
+      secondary,
+      nextClassLevel(occurrences, secondary),
+      healthConfig,
+      actorConfig,
+      state,
+      round,
+    );
+    const selected = mainHealth.value >= secondaryHealth.value ? mainHealth : secondaryHealth;
+    gestalt += selected.value;
+    if (selected.maximized) state.remainingMaximized -= 1;
+  }
+
+  if (!healthConfig.continuous) gestalt = round(gestalt);
+  return { standard, gestalt };
+}
+
+function fixedClassHealth(item, healthConfig, actorConfig, state, round) {
+  const subtype = getClassSubtype(item);
+  const config = subtype === "racial" ? actorConfig.classes.racial : actorConfig.classes.base;
+  if (!config.auto) {
+    const value = Number(item.system?.hp) || 0;
+    return healthConfig.continuous ? value : round(value);
+  }
+  if (subtype === "mythic") return (Number(item.system?.hd) || 0) * (Number(item.system?.level) || 0);
+
+  let total = 0;
+  const count = Math.max(0, Number(item.hitDice ?? item.system?.hitDice) || 0);
+  for (let level = 1; level <= count; level++) {
+    const result = levelHealth(item, level, healthConfig, actorConfig, state, round);
+    total += result.value;
+    if (result.maximized) state.remainingMaximized -= 1;
+  }
+  return total;
+}
+
+function levelHealth(item, _classLevel, healthConfig, actorConfig, state, round) {
+  if (!item) return { value: 0, maximized: false };
+  const subtype = getClassSubtype(item);
+  const config = subtype === "npc" ? actorConfig.classes.npc : actorConfig.classes.base;
+  const hitDice = Math.max(1, Number(item.hitDice ?? item.system?.hitDice ?? item.system?.level) || 1);
+  const favored = ["base", "prestige", "npc"].includes(subtype)
+    ? (Number(item.system?.fc?.hp?.value) || 0) / hitDice
+    : 0;
+
+  if (!config.auto) {
+    const total = Number(item.system?.hp) || 0;
+    return { value: total / hitDice + favored, maximized: false };
+  }
+
+  const die = Number(item.system?.hd) || 0;
+  const maximized = config.maximized === true && state.remainingMaximized > 0;
+  let value = maximized ? die : 1 + (die - 1) * config.rate;
+  if (!healthConfig.continuous) value = round(value);
+  return { value: value + favored, maximized };
 }
 
 function enhanceGestaltPage(app, element, actor) {
@@ -360,7 +502,7 @@ function statisticsRow(main, mainLevel, secondary, secondaryLevel) {
   return row;
 }
 
-function classLevelStatistics(item, level) {
+function classLevelStatistics(item, level, includeFractionalGoodBonus = true) {
   if (!item || !level) return { hd: 0, bab: 0, fort: 0, ref: 0, will: 0 };
   const fractional = useFractionalProgression();
   const result = {
@@ -369,7 +511,12 @@ function classLevelStatistics(item, level) {
   };
   for (const save of ["fort", "ref", "will"]) {
     result[save] = cumulativeSave(item, save, level, fractional) - cumulativeSave(item, save, level - 1, fractional);
-    if (fractional && level === 1 && item.system.savingThrows?.[save]?.value === "high") result[save] += 2;
+    if (
+      fractional
+      && includeFractionalGoodBonus
+      && level === 1
+      && item.system.savingThrows?.[save]?.value === "high"
+    ) result[save] += fractionalGoodSaveBonus();
   }
   return result;
 }

@@ -8,8 +8,10 @@ A Foundry VTT module for running gestalt characters with the Pathfinder 1e syste
 - Existing and unassigned classes default to the main track.
 - Displays both tracks on the character summary.
 - Counts character level and hit dice only once across the two tracks.
-- Uses the better aggregate BAB and base save progression from the two tracks.
-- Uses the higher class HP contribution of the two tracks instead of adding both.
+- Stores Main and Secondary class assignments for every gestalt level.
+- Uses the better BAB and base-save gain independently at every stored level.
+- Uses the better configured HP gain independently at every stored level.
+- Allows classes to be rearranged between levels within their own track by dragging them on the Gestalt tab.
 - Leaves racial hit dice and mythic paths additive.
 - Displays racial hit dice and mythic paths as fixed classes rather than editable gestalt tracks.
 
@@ -25,4 +27,4 @@ The controls appear on the character **Summary** tab immediately above the exist
 
 ## Calculation scope
 
-Version 0.2 uses the better aggregate progression of the two tracks. Exact level-by-level pairing—needed when a track multiclasses between progression types—will require a later level-history editor. Skill-rank allowances are not overridden yet.
+Version 0.3 calculates level, hit dice, BAB, base saves, and class HP from the level-by-level Gestalt array. Automatic HP follows PF1e's health configuration, including its rounding and maximized-hit-die settings. When class HP is entered manually, PF1e stores only one aggregate value on the class item, so the module distributes that value evenly across that class's stored levels before comparing each gestalt pair. Skill-rank allowances are not overridden yet.

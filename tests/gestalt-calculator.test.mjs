@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   calculateGestaltHealth,
+  calculateGestaltLevelProgression,
   calculateGestaltProgression,
   isFixedClass,
 } from "../scripts/gestalt-calculator.mjs";
@@ -112,5 +113,37 @@ test("uses only the higher manually entered HP track", () => {
     gestalt: 17,
     main: 17,
     secondary: 12,
+  });
+});
+
+test("chooses BAB and saves independently at every stored gestalt level", () => {
+  const items = new Map([
+    ["fighter", { id: "fighter" }],
+    ["wizard", { id: "wizard" }],
+    ["rogue", { id: "rogue" }],
+    ["cleric", { id: "cleric" }],
+  ]);
+  const gains = {
+    fighter: [{ bab: 1, fort: 2, ref: 0, will: 0 }, { bab: 1, fort: 1, ref: 0, will: 0 }],
+    wizard: [{ bab: 0, fort: 0, ref: 0, will: 2 }, { bab: 1, fort: 0, ref: 0, will: 1 }],
+    rogue: [{ bab: 0, fort: 0, ref: 2, will: 0 }],
+    cleric: [{ bab: 0, fort: 2, ref: 0, will: 2 }],
+  };
+  const result = calculateGestaltLevelProgression(
+    [
+      { mainClassId: "fighter", secondaryClassId: "wizard" },
+      { mainClassId: "rogue", secondaryClassId: "cleric" },
+      { mainClassId: "fighter", secondaryClassId: "wizard" },
+    ],
+    {
+      getItem: (id) => items.get(id),
+      getStats: (item, level) => ({ hitDice: 1, ...gains[item.id][level - 1] }),
+    },
+  );
+  assert.deepEqual(result, {
+    level: 3,
+    hitDice: 3,
+    bab: 2,
+    saves: { fort: 5, ref: 2, will: 5 },
   });
 });
