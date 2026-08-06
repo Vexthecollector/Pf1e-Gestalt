@@ -4,6 +4,7 @@ import {
   getClassSubtype,
   getTrack,
   isFixedClass,
+  selectGestaltLevelHealth,
   TRACK,
 } from "./gestalt-calculator.mjs";
 import {
@@ -34,18 +35,26 @@ Hooks.once("ready", async () => {
   }
 });
 
-Hooks.on("createActor", async (actor) => {
-  if (game.user.isGM && actor.type === "character") await ensureLevelArray(actor);
+Hooks.on("createActor", async (actor, _options, userId) => {
+  if (game.user.id === userId && actor.isOwner && actor.type === "character") await ensureLevelArray(actor);
 });
 
 // Keep the level array synchronized even when a class track or level is
 // changed somewhere other than the injected Summary-page control.
-Hooks.on("updateItem", async (item, changes) => {
+Hooks.on("updateItem", async (item, changes, options, userId) => {
+  if (game.user.id !== userId || options?.pf1GestaltSkipSync === true) return;
   if (item.type !== "class" || item.parent?.type !== "character") return;
   const trackChanged = foundry.utils.hasProperty(changes, FLAG_PATH);
   const levelChanged = foundry.utils.hasProperty(changes, "system.level");
   if (trackChanged || levelChanged) await synchronizeLevelArray(item.parent, { preserveOrder: levelChanged });
 });
+
+for (const hook of ["createItem", "deleteItem"]) {
+  Hooks.on(hook, async (item, _options, userId) => {
+    if (game.user.id !== userId || item.type !== "class" || item.parent?.type !== "character") return;
+    await synchronizeLevelArray(item.parent, { preserveOrder: true });
+  });
+}
 
 async function ensureLevelArray(actor) {
   if (actor.getFlag(MODULE_ID, LEVELS_FLAG) !== undefined) return;
@@ -334,9 +343,9 @@ function calculateArrayHealth(actor, classes, levels, healthConfig) {
       state,
       round,
     );
-    const selected = mainHealth.value >= secondaryHealth.value ? mainHealth : secondaryHealth;
+    const selected = selectGestaltLevelHealth(mainHealth, secondaryHealth);
     gestalt += selected.value;
-    if (selected.maximized) state.remainingMaximized -= 1;
+    if (selected.consumesMaximized) state.remainingMaximized -= 1;
   }
 
   if (!healthConfig.continuous) gestalt = round(gestalt);
@@ -401,9 +410,19 @@ function enhanceGestaltPage(app, element, actor) {
   const groups = document.createElement("ol");
   groups.className = "item-groups-list pf1-gestalt-level-groups";
 
-  const levels = normalizeLevelArray(actor.getFlag(MODULE_ID, LEVELS_FLAG));
+  const levels = reconcileLevelArray(actor.getFlag(MODULE_ID, LEVELS_FLAG), actor.itemTypes?.class ?? []);
   const classLevels = new Map();
-  for (const level of levels) groups.append(buildGestaltLevel(app, actor, level, classLevels));
+  const displayedGoodSaveBonuses = new Set();
+  if (useFractionalProgression()) {
+    for (const item of actor.itemTypes.class.filter(isFixedClass)) {
+      for (const save of ["fort", "ref", "will"]) {
+        if (item.system?.savingThrows?.[save]?.good === true) displayedGoodSaveBonuses.add(save);
+      }
+    }
+  }
+  for (const level of levels) {
+    groups.append(buildGestaltLevel(app, actor, level, classLevels, displayedGoodSaveBonuses));
+  }
   page.append(groups);
   navigation.append(link);
   body.append(page);
@@ -434,7 +453,7 @@ function activateGestaltPage(app, navigation, body, link, page) {
   for (const tab of body.querySelectorAll(".tab[data-group='primary']")) tab.classList.toggle("active", tab === page);
 }
 
-function buildGestaltLevel(app, actor, level, classLevels) {
+function buildGestaltLevel(app, actor, level, classLevels, displayedGoodSaveBonuses) {
   const list = document.createElement("ol");
   list.className = "item-list pf1-gestalt-level-list";
   const header = document.createElement("li");
@@ -453,7 +472,7 @@ function buildGestaltLevel(app, actor, level, classLevels) {
   const secondaryLevel = nextClassLevel(classLevels, secondary);
   list.append(classLevelRow(app, actor, level.level - 1, TRACK.MAIN, "PF1GESTALT.Track.Main", main, mainLevel));
   list.append(classLevelRow(app, actor, level.level - 1, TRACK.SECONDARY, "PF1GESTALT.Track.Secondary", secondary, secondaryLevel));
-  list.append(statisticsRow(main, mainLevel, secondary, secondaryLevel));
+  list.append(statisticsRow(main, mainLevel, secondary, secondaryLevel, displayedGoodSaveBonuses));
   return list;
 }
 
@@ -539,9 +558,9 @@ function activateGestaltDragAndDrop(row, app, actor) {
   });
 }
 
-function statisticsRow(main, mainLevel, secondary, secondaryLevel) {
-  const mainStats = classLevelStatistics(main, mainLevel);
-  const secondaryStats = classLevelStatistics(secondary, secondaryLevel);
+function statisticsRow(main, mainLevel, secondary, secondaryLevel, displayedGoodSaveBonuses) {
+  const mainStats = classLevelStatistics(main, mainLevel, false);
+  const secondaryStats = classLevelStatistics(secondary, secondaryLevel, false);
   const gained = {
     hd: Math.max(mainStats.hd, secondaryStats.hd),
     bab: Math.max(mainStats.bab, secondaryStats.bab),
@@ -549,6 +568,17 @@ function statisticsRow(main, mainLevel, secondary, secondaryLevel) {
     ref: Math.max(mainStats.ref, secondaryStats.ref),
     will: Math.max(mainStats.will, secondaryStats.will),
   };
+  if (useFractionalProgression()) {
+    for (const save of ["fort", "ref", "will"]) {
+      const hasGoodSave = [main, secondary]
+        .filter(Boolean)
+        .some((item) => item.system?.savingThrows?.[save]?.good === true);
+      if (hasGoodSave && !displayedGoodSaveBonuses.has(save)) {
+        gained[save] += fractionalGoodSaveBonus();
+        displayedGoodSaveBonuses.add(save);
+      }
+    }
+  }
   const row = document.createElement("li");
   row.className = "item flexrow pf1-gestalt-statistics-row";
   const name = document.createElement("div");
@@ -724,7 +754,7 @@ function renderApp(app) {
  * displayed on the Summary page.
  */
 async function updateClassTrack(item, track) {
-  await item.update({ [FLAG_PATH]: track });
+  await item.update({ [FLAG_PATH]: track }, { pf1GestaltSkipSync: true });
   const actor = item.parent;
   if (actor?.type !== "character") return;
   await synchronizeLevelArray(actor);
