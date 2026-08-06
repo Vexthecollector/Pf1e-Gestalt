@@ -1,0 +1,40 @@
+{
+  "id": "pf1-gestalt",
+  "title": "PF1e Gestalt",
+  "description": "Adds main and secondary class tracks and gestalt progression to Pathfinder 1e characters.",
+  "version": "0.2.1",
+  "authors": [
+    {
+      "name": "Vex"
+    }
+  ],
+  "esmodules": [
+    "scripts/pf1-gestalt.mjs"
+  ],
+  "styles": [
+    "styles/pf1-gestalt.css"
+  ],
+  "languages": [
+    {
+      "lang": "en",
+      "name": "English",
+      "path": "lang/en.json"
+    }
+  ],
+  "compatibility": {
+    "minimum": "13",
+    "verified": "13",
+    "maximum": "13"
+  },
+  "relationships": {
+    "systems": [
+      {
+        "id": "pf1",
+        "type": "system",
+        "compatibility": {
+          "minimum": "11.0"
+        }
+      }
+    ]
+  }
+}

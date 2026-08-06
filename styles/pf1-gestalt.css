@@ -1,0 +1,58 @@
+.pf1-gestalt-summary {
+  background: linear-gradient(90deg, rgb(96 45 124 / 12%), rgb(45 91 124 / 12%));
+  border: 2px solid #6f4d8e;
+  border-radius: 4px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  gap: 0.5rem;
+  margin: 0 0 0.75rem;
+  padding: 0.4rem;
+}
+
+.pf1-gestalt-summary > div {
+  align-items: center;
+  background: rgb(0 0 0 / 5%);
+  border: 1px solid var(--color-border-light-tertiary);
+  display: flex;
+  flex-direction: column;
+  min-height: 2.75rem;
+  padding: 0.25rem 0.5rem;
+}
+
+.pf1-gestalt-summary strong {
+  color: var(--color-text-dark-primary);
+  font-family: var(--font-primary);
+}
+
+.pf1-gestalt-summary span {
+  font-size: var(--font-size-12);
+  text-align: center;
+}
+
+.pf1-gestalt-class-row[data-gestalt-track="secondary"] {
+  box-shadow: inset 3px 0 0 #6f4d8e;
+}
+
+.pf1-gestalt-class-row[data-gestalt-track="fixed"] {
+  box-shadow: inset 3px 0 0 #666;
+}
+
+.pf1-gestalt-track {
+  flex: 0 0 7.5rem !important;
+}
+
+.pf1-gestalt-track select {
+  max-width: 7rem;
+  width: 100%;
+}
+
+.pf1-gestalt-fixed-label {
+  color: var(--color-text-dark-secondary);
+  font-style: italic;
+}
+
+.pf1-gestalt-class-setting {
+  border-bottom: 1px solid var(--color-border-light-tertiary);
+  margin-bottom: 0.5rem;
+  padding: 0.5rem;
+}
