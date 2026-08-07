@@ -27,4 +27,4 @@ The controls appear on the character **Summary** tab immediately above the exist
 
 ## Calculation scope
 
-Version 0.3 calculates level, hit dice, BAB, base saves, and class HP from the level-by-level Gestalt array. Automatic HP follows PF1e's health configuration, including its rounding and maximized-hit-die settings. When class HP is entered manually, PF1e stores only one aggregate value on the class item, so the module distributes that value evenly across that class's stored levels before comparing each gestalt pair. Skill-rank allowances are not overridden yet.
+Version 0.4 calculates level, hit dice, BAB, base saves, class HP, and skill-rank allowances from the level-by-level Gestalt array. Automatic HP follows PF1e's health configuration, including its rounding and maximized-hit-die settings. When class HP is entered manually, PF1e stores only one aggregate value on the class item, so the module distributes that value evenly across that class's stored levels before comparing each gestalt pair. Skill ranks use the better class allowance at each level and include Intelligence, minimum ranks, background skills, and one favored-class bonus per character level.

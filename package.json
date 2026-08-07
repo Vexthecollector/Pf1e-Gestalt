@@ -1,9 +1,9 @@
 {
   "name": "pf1-gestalt",
-  "version": "0.3.3",
+  "version": "0.4.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test tests/gestalt-calculator.test.mjs tests/gestalt-levels.test.mjs"
+    "test": "node --test tests/gestalt-calculator.test.mjs tests/gestalt-levels.test.mjs tests/gestalt-skills.test.mjs"
   }
 }

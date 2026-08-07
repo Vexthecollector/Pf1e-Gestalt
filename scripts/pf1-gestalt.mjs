@@ -14,6 +14,7 @@ import {
   reconcileLevelArray,
   swapLevelAssignments,
 } from "./gestalt-levels.mjs";
+import { calculateGestaltSkillRanks } from "./gestalt-skills.mjs";
 
 const MODULE_ID = "pf1-gestalt";
 const FLAG_PATH = `flags.${MODULE_ID}.track`;
@@ -136,28 +137,76 @@ function adjustGestaltLevelUpForm(app, html) {
   const actor = app.actor;
   const item = app.item;
   if (actor?.type !== "character" || item?.type !== "class" || isFixedClass(item)) return;
+  if (!actor.itemTypes.class.some((entry) => !isFixedClass(entry) && getTrack(entry) === TRACK.SECONDARY)) return;
   const lowerTrack = lowerGestaltTrack(actor);
-  if (!lowerTrack || getTrack(item) !== lowerTrack) return;
-
-  // PF1e looks up ASIs from the preview actor's total HD without checking
-  // whether HD actually increased. A catch-up level fills an existing gestalt
-  // row, so suppress that repeated milestone reward.
-  app.config.abilityScore.new = 0;
-  app.config.abilityScore.used = 0;
-  for (const ability of Object.values(app.config.abilityScore.upgrades ?? {})) ability.added = 0;
+  const catchUp = lowerTrack && getTrack(item) === lowerTrack;
 
   const element = rootElement(html, app);
-  const segment = element?.querySelector(".segment.ability-score");
-  if (segment) {
-    const heading = document.createElement("h2");
-    heading.textContent = localize("PF1.LevelUp.AbilityScore.Label");
-    const note = document.createElement("p");
-    note.className = "info pf1-gestalt-catch-up-note";
-    note.textContent = localize("PF1GESTALT.LevelUp.CatchUpASI");
-    segment.replaceChildren(heading, note);
+  if (catchUp) {
+    // PF1e looks up ASIs from the preview actor's total HD without checking
+    // whether HD actually increased. A catch-up level fills an existing
+    // gestalt row, so suppress repeated milestone and favored-class rewards.
+    app.config.abilityScore.new = 0;
+    app.config.abilityScore.used = 0;
+    for (const ability of Object.values(app.config.abilityScore.upgrades ?? {})) ability.added = 0;
+    app.config.fcb.choice = "none";
+    app.config.fcb.available = false;
+    app.config.fcb.unavailable = true;
+    replaceLevelUpSegment(
+      element,
+      ".segment.ability-score",
+      "PF1.LevelUp.AbilityScore.Label",
+      "PF1GESTALT.LevelUp.CatchUpASI",
+    );
+    replaceLevelUpSegment(
+      element,
+      ".segment.fcb",
+      "PF1.LevelUp.FC.Label",
+      "PF1GESTALT.LevelUp.CatchUpFCB",
+    );
   }
+
+  adjustLevelUpSkillRanks(app, element, catchUp);
   const submit = element?.querySelector("button[type='submit'][data-action='commit']");
   if (submit && typeof app.isReady === "function") submit.disabled = !app.isReady();
+}
+
+function replaceLevelUpSegment(element, selector, headingKey, noteKey) {
+  const segment = element?.querySelector(selector);
+  if (!segment) return;
+  const heading = document.createElement("h2");
+  heading.textContent = localize(headingKey);
+  const note = document.createElement("p");
+  note.className = "info pf1-gestalt-catch-up-note";
+  note.textContent = localize(noteKey);
+  segment.replaceChildren(heading, note);
+}
+
+function adjustLevelUpSkillRanks(app, element, catchUp) {
+  if (!app.simulacra || !app.config.skills) return;
+  const oldRanks = actorGestaltSkillRanks(app.actor);
+  const newRanks = actorGestaltSkillRanks(app.simulacra);
+  const pendingFavoredRank = !catchUp && app.config.fcb.choice === "skill" ? 1 : 0;
+  const adventureDelta = newRanks.adventure - oldRanks.adventure + pendingFavoredRank;
+  const backgroundDelta = newRanks.background - oldRanks.background;
+  app.config.skills.old = { value: oldRanks.adventure, bg: oldRanks.background };
+  app.config.skills.new = { value: newRanks.adventure, bg: newRanks.background };
+  app.config.skills.delta = { adv: adventureDelta, bg: backgroundDelta, ranks: adventureDelta };
+  app.config.level.skills = adventureDelta + backgroundDelta;
+
+  const skill = element?.querySelector(".summary .details .skill");
+  if (!skill) return;
+  skill.classList.toggle("disabled", adventureDelta === 0 && backgroundDelta === 0);
+  if (app.useBackgroundSkills) {
+    const adventure = skill.querySelector(".adventure .value");
+    const background = skill.querySelector(".background .value");
+    if (adventure) adventure.textContent = signed(adventureDelta);
+    if (background) background.textContent = signed(backgroundDelta);
+  }
+  else {
+    const value = skill.querySelector(":scope > .value");
+    if (value) value.textContent = signed(adventureDelta);
+  }
 }
 
 function enhanceRenderedSheet(app, html) {
@@ -218,6 +267,50 @@ function enhanceCharacterSheet(app, element, actor) {
     insertTrackDetails(row, details);
   }
   addCatchUpLevelButtons(app, classesBody, actor);
+  adjustCharacterSkillRanks(element, actor);
+}
+
+function actorGestaltSkillRanks(actor) {
+  const classes = [...(actor.itemTypes?.class ?? [])];
+  const levels = reconcileLevelArray(actor.getFlag(MODULE_ID, LEVELS_FLAG), classes);
+  const intelligence = actor.system.abilities?.int;
+  const result = calculateGestaltSkillRanks(levels, classes, {
+    intMod: intelligence?.mod ?? 0,
+    mindless: intelligence?.value === null,
+    useBackgroundSkills: game.settings.get("pf1", "allowBackgroundSkills") === true,
+    backgroundClasses: pf1.config.backgroundSkillClasses,
+    backgroundPerLevel: pf1.config.backgroundSkillsPerLevel,
+  });
+  result.adventure += Number(actor.system.details?.skills?.bonus) || 0;
+  return result;
+}
+
+function adjustCharacterSkillRanks(element, actor) {
+  if (!actor.itemTypes.class.some((item) => !isFixedClass(item) && getTrack(item) === TRACK.SECONDARY)) return;
+  const ranks = actorGestaltSkillRanks(actor);
+  const adventure = element.querySelector("header.skill-ranks .adventure");
+  const background = element.querySelector("header.skill-ranks .background");
+  const transferred = element.querySelector("header.skill-ranks .transferred .value");
+  if (!adventure) return;
+
+  const used = Number(adventure.querySelector(".used .value")?.textContent) || 0;
+  const bgUsed = Number(background?.querySelector(".used .value")?.textContent) || 0;
+  let allowed = ranks.adventure;
+  let bgAllowed = ranks.background;
+  let sentToBackground = 0;
+  if (background && bgUsed > bgAllowed) {
+    sentToBackground = bgUsed - bgAllowed;
+    allowed -= sentToBackground;
+    bgAllowed += sentToBackground;
+  }
+
+  const allowedValue = adventure.querySelector(".available .value");
+  const usedValue = adventure.querySelector(".used .value");
+  const bgAllowedValue = background?.querySelector(".available .value");
+  if (allowedValue) allowedValue.textContent = String(allowed);
+  if (usedValue) usedValue.textContent = String(used);
+  if (bgAllowedValue) bgAllowedValue.textContent = String(bgAllowed);
+  if (transferred) transferred.textContent = String(sentToBackground);
 }
 
 function addCatchUpLevelButtons(app, classesBody, actor) {
@@ -472,7 +565,7 @@ function buildGestaltLevel(app, actor, level, classLevels, displayedGoodSaveBonu
   const secondaryLevel = nextClassLevel(classLevels, secondary);
   list.append(classLevelRow(app, actor, level.level - 1, TRACK.MAIN, "PF1GESTALT.Track.Main", main, mainLevel));
   list.append(classLevelRow(app, actor, level.level - 1, TRACK.SECONDARY, "PF1GESTALT.Track.Secondary", secondary, secondaryLevel));
-  list.append(statisticsRow(main, mainLevel, secondary, secondaryLevel, displayedGoodSaveBonuses));
+  list.append(statisticsRow(actor, main, mainLevel, secondary, secondaryLevel, displayedGoodSaveBonuses));
   return list;
 }
 
@@ -558,15 +651,18 @@ function activateGestaltDragAndDrop(row, app, actor) {
   });
 }
 
-function statisticsRow(main, mainLevel, secondary, secondaryLevel, displayedGoodSaveBonuses) {
+function statisticsRow(actor, main, mainLevel, secondary, secondaryLevel, displayedGoodSaveBonuses) {
   const mainStats = classLevelStatistics(main, mainLevel, false);
   const secondaryStats = classLevelStatistics(secondary, secondaryLevel, false);
+  const mainSkills = classLevelSkillRanks(actor, main, mainLevel);
+  const secondarySkills = classLevelSkillRanks(actor, secondary, secondaryLevel);
   const gained = {
     hd: Math.max(mainStats.hd, secondaryStats.hd),
     bab: Math.max(mainStats.bab, secondaryStats.bab),
     fort: Math.max(mainStats.fort, secondaryStats.fort),
     ref: Math.max(mainStats.ref, secondaryStats.ref),
     will: Math.max(mainStats.will, secondaryStats.will),
+    skills: Math.max(mainSkills.base, secondarySkills.base) + Math.max(mainSkills.favored, secondarySkills.favored),
   };
   if (useFractionalProgression()) {
     for (const save of ["fort", "ref", "will"]) {
@@ -593,9 +689,19 @@ function statisticsRow(main, mainLevel, secondary, secondaryLevel, displayedGood
     statCell("PF1.SavingThrowFort", signed(gained.fort)),
     statCell("PF1.SavingThrowRef", signed(gained.ref)),
     statCell("PF1.SavingThrowWill", signed(gained.will)),
+    statCell("PF1.SkillRankPlural", signed(gained.skills)),
     emptyControls(),
   );
   return row;
+}
+
+function classLevelSkillRanks(actor, item, classLevel) {
+  if (!item || !classLevel) return { base: 0, favored: 0 };
+  const intelligence = actor.system.abilities?.int;
+  const favored = (Number(item.system?.fc?.skill?.value) || 0) >= classLevel ? 1 : 0;
+  if (intelligence?.value === null) return { base: 0, favored };
+  const base = Math.max(1, (Number(item.system?.skillsPerLevel) || 0) + (Number(intelligence?.mod) || 0));
+  return { base, favored };
 }
 
 function classLevelStatistics(item, level, includeFractionalGoodBonus = true) {
