@@ -9,6 +9,7 @@
   "PF1GESTALT.Level.Unassigned": "Unassigned",
   "PF1GESTALT.Level.Statistics": "Statistics Gained",
   "PF1GESTALT.Level.HitDie": "Hit Die",
+  "PF1GESTALT.Source.GestaltClasses": "Gestalt Classes",
   "PF1GESTALT.LevelUp.CatchUpASI": "This level catches up the lower gestalt track and does not increase the character's total level, so it grants no additional ability score increase.",
   "PF1GESTALT.LevelUp.CatchUpFCB": "A favored-class bonus is granted once per character level. It was already available when the leading gestalt track gained this level."
 }

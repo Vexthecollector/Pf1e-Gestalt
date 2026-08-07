@@ -15,6 +15,7 @@ import {
   swapLevelAssignments,
 } from "./gestalt-levels.mjs";
 import { calculateGestaltSkillRanks } from "./gestalt-skills.mjs";
+import { replaceSourceEntries, updateSourceEntry } from "./gestalt-sources.mjs";
 
 const MODULE_ID = "pf1-gestalt";
 const FLAG_PATH = `flags.${MODULE_ID}.track`;
@@ -109,6 +110,66 @@ function applyGestaltProgression(actor) {
     if (data) data.total += result.saves[save] - result.standard.saves[save];
   }
 
+  replaceGestaltSourceDetails(actor, classes, result, health, hpAbility, hpAbilityMod);
+}
+
+function replaceGestaltSourceDetails(actor, classes, result, health, hpAbility, hpAbilityMod) {
+  const sourceInfo = actor.sourceInfo;
+  if (!sourceInfo) return;
+  const classNames = new Set(classes.map((item) => item.name));
+  const gestaltLabel = localize("PF1GESTALT.Source.GestaltClasses");
+  const sourceId = `${MODULE_ID}.class-progression`;
+
+  replaceSourceEntries(sourceInfo, "system.attributes.bab.total", {
+    matches: (entry) => classNames.has(entry.name) && !entry.change,
+    name: gestaltLabel,
+    value: result.bab,
+    id: sourceId,
+  });
+
+  const baseLabel = localize("PF1.Base");
+  const goodSaveLabel = localize("PF1.SavingThrowGoodFractionalBonus");
+  for (const save of ["fort", "ref", "will"]) {
+    const generatedNames = new Set([...classNames, baseLabel, goodSaveLabel]);
+    replaceSourceEntries(sourceInfo, `system.attributes.savingThrows.${save}.total`, {
+      matches: (entry) => (
+        entry.change?.target === save
+        && !entry.change.parent
+        && generatedNames.has(entry.name)
+      ),
+      name: gestaltLabel,
+      value: result.saves[save],
+      id: sourceId,
+    });
+  }
+
+  const favoredNames = new Set(classes.map((item) => (
+    game.i18n.format("PF1.SourceInfoSkillRank_ClassFC", { className: item.name })
+  )));
+  const healthNames = new Set([...classNames, ...favoredNames]);
+  for (const [attribute, target] of [["hp", "mhp"], ["vigor", "vigor"]]) {
+    if (!actor.system.attributes[attribute]) continue;
+    replaceSourceEntries(sourceInfo, `system.attributes.${attribute}.max`, {
+      matches: (entry) => (
+        entry.change?.target === target
+        && !entry.change.parent
+        && healthNames.has(entry.name)
+      ),
+      name: gestaltLabel,
+      value: health.gestalt,
+      id: sourceId,
+    });
+  }
+
+  if (hpAbility) {
+    const abilityLabel = pf1.config.abilities[hpAbility];
+    updateSourceEntry(
+      sourceInfo,
+      "system.attributes.hp.max",
+      (entry) => entry.change?.target === "mhp" && entry.name === abilityLabel,
+      hpAbilityMod * result.hitDice,
+    );
+  }
 }
 
 function useFractionalProgression() {
