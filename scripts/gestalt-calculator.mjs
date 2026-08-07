@@ -77,11 +77,6 @@ export function calculateGestaltLevelProgression(
   { getItem, getStats, fixedStats = [] },
 ) {
   const totals = { level: 0, hitDice: 0, bab: 0, saves: { fort: 0, ref: 0, will: 0 } };
-  const tracks = {
-    main: { bab: 0, saves: { fort: 0, ref: 0, will: 0 } },
-    secondary: { bab: 0, saves: { fort: 0, ref: 0, will: 0 } },
-  };
-  const selected = { bab: 0, saves: { fort: 0, ref: 0, will: 0 } };
   const rows = [];
   const occurrences = new Map();
   const advance = (item) => {
@@ -103,24 +98,14 @@ export function calculateGestaltLevelProgression(
     }
     totals.level += 1;
     totals.hitDice += Math.max(Number(mainStats.hitDice) || 0, Number(secondaryStats.hitDice) || 0);
-
-    tracks.main.bab += Number(mainStats.bab) || 0;
-    tracks.secondary.bab += Number(secondaryStats.bab) || 0;
-    const nextBAB = Math.max(tracks.main.bab, tracks.secondary.bab);
-    gained.bab = nextBAB - selected.bab;
-    selected.bab = nextBAB;
+    gained.bab = selectProgressionGain(main, mainStats, secondary, secondaryStats, "bab");
+    totals.bab += gained.bab;
     for (const save of ["fort", "ref", "will"]) {
-      tracks.main.saves[save] += Number(mainStats[save]) || 0;
-      tracks.secondary.saves[save] += Number(secondaryStats[save]) || 0;
-      const nextSave = Math.max(tracks.main.saves[save], tracks.secondary.saves[save]);
-      gained[save] = nextSave - selected.saves[save];
-      selected.saves[save] = nextSave;
+      gained[save] = selectProgressionGain(main, mainStats, secondary, secondaryStats, save);
+      totals.saves[save] += gained[save];
     }
     rows.push(gained);
   }
-
-  totals.bab = selected.bab;
-  totals.saves = { ...selected.saves };
 
   for (const stats of fixedStats) {
     totals.hitDice += Number(stats.hitDice) || 0;
@@ -128,6 +113,26 @@ export function calculateGestaltLevelProgression(
     for (const save of ["fort", "ref", "will"]) totals.saves[save] += Number(stats[save]) || 0;
   }
   return { ...totals, rows };
+}
+
+/** Choose the gain from the higher progression category. Numeric comparison is
+ * retained for equal or custom categories, where neither side is categorically
+ * better. */
+function selectProgressionGain(main, mainStats, secondary, secondaryStats, stat) {
+  const mainGain = Number(mainStats[stat]) || 0;
+  const secondaryGain = Number(secondaryStats[stat]) || 0;
+  if (!main) return secondaryGain;
+  if (!secondary) return mainGain;
+
+  const rankKey = `${stat}Rank`;
+  const mainRank = mainStats[rankKey];
+  const secondaryRank = secondaryStats[rankKey];
+  if (
+    Number.isFinite(mainRank)
+    && Number.isFinite(secondaryRank)
+    && mainRank !== secondaryRank
+  ) return mainRank > secondaryRank ? mainGain : secondaryGain;
+  return Math.max(mainGain, secondaryGain);
 }
 
 /** Select the higher per-level health result while consuming any maximized

@@ -734,17 +734,24 @@ function classLevelStatistics(item, level, includeFractionalGoodBonus = true) {
   const result = {
     hd: Number(item.system.hd) || 0,
     bab: cumulativeBAB(item, level, fractional) - cumulativeBAB(item, level - 1, fractional),
+    babRank: progressionRank(item.system.bab, { low: 1, med: 2, high: 3 }),
   };
   for (const save of ["fort", "ref", "will"]) {
+    const progression = item.system.savingThrows?.[save]?.value;
     result[save] = cumulativeSave(item, save, level, fractional) - cumulativeSave(item, save, level - 1, fractional);
+    result[`${save}Rank`] = progressionRank(progression, { low: 1, high: 2 });
     if (
       fractional
       && includeFractionalGoodBonus
       && level === 1
-      && item.system.savingThrows?.[save]?.value === "high"
+      && progression === "high"
     ) result[save] += fractionalGoodSaveBonus();
   }
   return result;
+}
+
+function progressionRank(value, ranks) {
+  return Object.hasOwn(ranks, value) ? ranks[value] : null;
 }
 
 function cumulativeBAB(item, level, fractional) {
