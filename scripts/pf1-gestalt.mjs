@@ -531,14 +531,14 @@ function levelHealth(item, _classLevel, healthConfig, actorConfig, state, round)
 
   if (!config.auto) {
     const total = Number(item.system?.hp) || 0;
-    return { value: total / hitDice + favored, maximized: false };
+    return { value: total / hitDice, favored, maximized: false };
   }
 
   const die = Number(item.system?.hd) || 0;
   const maximized = config.maximized === true && state.remainingMaximized > 0;
   let value = maximized ? die : 1 + (die - 1) * config.rate;
   if (!healthConfig.continuous) value = round(value);
-  return { value: value + favored, maximized };
+  return { value, favored, maximized };
 }
 
 function enhanceGestaltPage(app, element, actor) {
@@ -748,7 +748,7 @@ function statisticsRow(
     fort: progressionGain?.fort ?? 0,
     ref: progressionGain?.ref ?? 0,
     will: progressionGain?.will ?? 0,
-    skills: Math.max(mainSkills.base, secondarySkills.base) + Math.max(mainSkills.favored, secondarySkills.favored),
+    skills: Math.max(mainSkills.base, secondarySkills.base) + mainSkills.favored + secondarySkills.favored,
   };
   if (useFractionalProgression()) {
     for (const save of ["fort", "ref", "will"]) {

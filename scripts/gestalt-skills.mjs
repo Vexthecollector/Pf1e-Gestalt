@@ -40,7 +40,7 @@ export function calculateGestaltSkillRanks(
     const secondary = advance(byId.get(row.secondaryClassId));
     result.adventure += Math.max(main.adventure, secondary.adventure);
     result.background += Math.max(main.background, secondary.background);
-    result.favored += Math.max(main.favored, secondary.favored);
+    result.favored += main.favored + secondary.favored;
   }
 
   // Racial hit dice remain additive and do not occupy gestalt rows. Mythic

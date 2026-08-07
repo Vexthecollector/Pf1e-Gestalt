@@ -163,3 +163,13 @@ test("a maximized opportunity is consumed even when manual HP wins the level", (
     { value: 8, consumesMaximized: true },
   );
 });
+
+test("adds favored HP from both classes after selecting the better health", () => {
+  assert.deepEqual(
+    selectGestaltLevelHealth(
+      { value: 12, favored: 1, maximized: true },
+      { value: 6, favored: 1, maximized: true },
+    ),
+    { value: 14, consumesMaximized: true },
+  );
+});

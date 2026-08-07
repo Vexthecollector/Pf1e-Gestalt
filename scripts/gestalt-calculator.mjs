@@ -140,7 +140,7 @@ function selectProgressionGain(main, mainStats, secondary, secondaryStats, stat)
 export function selectGestaltLevelHealth(main, secondary) {
   const selected = main.value >= secondary.value ? main : secondary;
   return {
-    value: selected.value,
+    value: selected.value + (Number(main.favored) || 0) + (Number(secondary.favored) || 0),
     consumesMaximized: main.maximized === true || secondary.maximized === true,
   };
 }

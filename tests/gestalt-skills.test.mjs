@@ -42,7 +42,7 @@ test("applies the minimum one rank per hit die", () => {
   assert.equal(result.adventure, 1);
 });
 
-test("does not double favored-class skill bonuses across paired tracks", () => {
+test("adds favored-class skill bonuses from both paired tracks", () => {
   const classes = [
     cls("fighter", 2, { favored: 1 }),
     cls("rogue", 8, { track: "secondary", favored: 1 }),
@@ -52,7 +52,7 @@ test("does not double favored-class skill bonuses across paired tracks", () => {
     classes,
     { intMod: 0 },
   );
-  assert.deepEqual(result, { adventure: 9, background: 0, favored: 1 });
+  assert.deepEqual(result, { adventure: 10, background: 0, favored: 2 });
 });
 
 test("calculates background ranks independently from adventure ranks", () => {
