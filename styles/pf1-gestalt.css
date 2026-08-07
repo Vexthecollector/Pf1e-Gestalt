@@ -51,12 +51,6 @@
   font-style: italic;
 }
 
-.pf1-gestalt-class-setting {
-  border-bottom: 1px solid var(--color-border-light-tertiary);
-  margin-bottom: 0.5rem;
-  padding: 0.5rem;
-}
-
 .pf1.sheet.actor.character .sheet-navigation {
   flex-wrap: wrap;
   height: auto;

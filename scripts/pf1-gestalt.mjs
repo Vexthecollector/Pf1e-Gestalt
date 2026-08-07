@@ -125,8 +125,6 @@ for (const hook of [
   "renderCharacterSheetPF",
   "renderActorSheetPF",
   "renderActorSheet",
-  "renderItemSheetPF",
-  "renderItemSheet",
 ]) {
   Hooks.on(hook, enhanceRenderedSheet);
 }
@@ -215,9 +213,6 @@ function enhanceRenderedSheet(app, html) {
 
   const actor = app.actor ?? (app.document?.documentName === "Actor" ? app.document : null);
   if (actor?.type === "character") enhanceCharacterSheet(app, element, actor);
-
-  const item = app.item ?? (app.document?.documentName === "Item" ? app.document : null);
-  if (item?.type === "class" && item.parent?.type === "character") enhanceClassSheet(element, item);
 }
 
 function enhanceCharacterSheet(app, element, actor) {
@@ -791,40 +786,6 @@ function statCell(labelKey, value) {
 function signed(value) {
   const number = Number(value) || 0;
   return `${number >= 0 ? "+" : ""}${Number.isInteger(number) ? number : number.toFixed(2)}`;
-}
-
-function enhanceClassSheet(element, item) {
-  const form = element.querySelector("form") ?? element.querySelector(".window-content");
-  if (!form || form.querySelector(".pf1-gestalt-class-setting")) return;
-
-  const group = document.createElement("div");
-  group.className = "form-group pf1-gestalt-class-setting";
-  const label = document.createElement("label");
-  label.textContent = localize("PF1GESTALT.Track.Label");
-  const fields = document.createElement("div");
-  fields.className = "form-fields";
-  group.append(label, fields);
-
-  if (isFixedClass(item)) {
-    const fixedLabel = document.createElement("span");
-    fixedLabel.className = "pf1-gestalt-fixed-label";
-    fixedLabel.textContent = localize("PF1GESTALT.Track.Fixed");
-    fields.append(fixedLabel);
-    form.prepend(group);
-    return;
-  }
-
-  const select = document.createElement("select");
-  select.append(
-    option(TRACK.MAIN, localize("PF1GESTALT.Track.Main"), getTrack(item)),
-    option(TRACK.SECONDARY, localize("PF1GESTALT.Track.Secondary"), getTrack(item)),
-  );
-  select.disabled = !item.isOwner;
-  select.addEventListener("change", async (event) => {
-    await updateClassTrack(item, event.currentTarget.value);
-  });
-  fields.append(select);
-  form.prepend(group);
 }
 
 function buildSummary(main, secondary, fixed) {

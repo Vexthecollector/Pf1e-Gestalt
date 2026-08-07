@@ -23,7 +23,7 @@ Link or copy this directory into Foundry's `Data/modules/pf1-gestalt` directory,
 
 The current manifest targets Foundry VTT 13 and PF1 system 11.x.
 
-The controls appear on the character **Summary** tab immediately above the existing class list. Each class row has a track selector. The selector also appears at the top of an opened class-item sheet.
+The controls appear on the character **Summary** tab immediately above the existing class list. Each class row has a track selector.
 
 ## Calculation scope
 
