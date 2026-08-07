@@ -595,11 +595,11 @@ function classLevelRow(app, actor, levelIndex, track, labelKey, item, classLevel
   trackCell.className = "item-detail pf1-gestalt-page-track";
   trackCell.textContent = localize(labelKey);
   const classLevelCell = document.createElement("div");
-  classLevelCell.className = "item-detail item-feat-level";
+  classLevelCell.className = "item-detail item-feat-level pf1-gestalt-class-level";
   classLevelCell.textContent = item
     ? game.i18n.format("PF1GESTALT.Level.ClassLevel", { level: classLevel })
     : "—";
-  row.append(name, trackCell, classLevelCell, emptyControls());
+  row.append(name, trackCell, classLevelCell);
   return row;
 }
 
@@ -690,7 +690,6 @@ function statisticsRow(actor, main, mainLevel, secondary, secondaryLevel, displa
     statCell("PF1.SavingThrowRef", signed(gained.ref)),
     statCell("PF1.SavingThrowWill", signed(gained.will)),
     statCell("PF1.SkillRankPlural", signed(gained.skills)),
-    emptyControls(),
   );
   return row;
 }
@@ -757,12 +756,6 @@ function statCell(labelKey, value) {
   cell.dataset.tooltip = labelKey;
   cell.textContent = value;
   return cell;
-}
-
-function emptyControls() {
-  const controls = document.createElement("div");
-  controls.className = "item-controls";
-  return controls;
 }
 
 function signed(value) {
