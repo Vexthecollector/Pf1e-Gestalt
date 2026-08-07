@@ -513,8 +513,22 @@ function enhanceGestaltPage(app, element, actor) {
       }
     }
   }
+  const displayedProgression = calculateGestaltLevelProgression(levels, {
+    getItem: (id) => actor.items.get(id),
+    getStats: (item, level) => ({
+      ...classLevelStatistics(item, level, false),
+      hitDice: 1,
+    }),
+  });
   for (const level of levels) {
-    groups.append(buildGestaltLevel(app, actor, level, classLevels, displayedGoodSaveBonuses));
+    groups.append(buildGestaltLevel(
+      app,
+      actor,
+      level,
+      classLevels,
+      displayedGoodSaveBonuses,
+      displayedProgression.rows[level.level - 1],
+    ));
   }
   page.append(groups);
   navigation.append(link);
@@ -546,7 +560,7 @@ function activateGestaltPage(app, navigation, body, link, page) {
   for (const tab of body.querySelectorAll(".tab[data-group='primary']")) tab.classList.toggle("active", tab === page);
 }
 
-function buildGestaltLevel(app, actor, level, classLevels, displayedGoodSaveBonuses) {
+function buildGestaltLevel(app, actor, level, classLevels, displayedGoodSaveBonuses, progressionGain) {
   const list = document.createElement("ol");
   list.className = "item-list pf1-gestalt-level-list";
   const header = document.createElement("li");
@@ -565,7 +579,15 @@ function buildGestaltLevel(app, actor, level, classLevels, displayedGoodSaveBonu
   const secondaryLevel = nextClassLevel(classLevels, secondary);
   list.append(classLevelRow(app, actor, level.level - 1, TRACK.MAIN, "PF1GESTALT.Track.Main", main, mainLevel));
   list.append(classLevelRow(app, actor, level.level - 1, TRACK.SECONDARY, "PF1GESTALT.Track.Secondary", secondary, secondaryLevel));
-  list.append(statisticsRow(actor, main, mainLevel, secondary, secondaryLevel, displayedGoodSaveBonuses));
+  list.append(statisticsRow(
+    actor,
+    main,
+    mainLevel,
+    secondary,
+    secondaryLevel,
+    displayedGoodSaveBonuses,
+    progressionGain,
+  ));
   return list;
 }
 
@@ -651,17 +673,25 @@ function activateGestaltDragAndDrop(row, app, actor) {
   });
 }
 
-function statisticsRow(actor, main, mainLevel, secondary, secondaryLevel, displayedGoodSaveBonuses) {
+function statisticsRow(
+  actor,
+  main,
+  mainLevel,
+  secondary,
+  secondaryLevel,
+  displayedGoodSaveBonuses,
+  progressionGain,
+) {
   const mainStats = classLevelStatistics(main, mainLevel, false);
   const secondaryStats = classLevelStatistics(secondary, secondaryLevel, false);
   const mainSkills = classLevelSkillRanks(actor, main, mainLevel);
   const secondarySkills = classLevelSkillRanks(actor, secondary, secondaryLevel);
   const gained = {
     hd: Math.max(mainStats.hd, secondaryStats.hd),
-    bab: Math.max(mainStats.bab, secondaryStats.bab),
-    fort: Math.max(mainStats.fort, secondaryStats.fort),
-    ref: Math.max(mainStats.ref, secondaryStats.ref),
-    will: Math.max(mainStats.will, secondaryStats.will),
+    bab: progressionGain?.bab ?? 0,
+    fort: progressionGain?.fort ?? 0,
+    ref: progressionGain?.ref ?? 0,
+    will: progressionGain?.will ?? 0,
     skills: Math.max(mainSkills.base, secondarySkills.base) + Math.max(mainSkills.favored, secondarySkills.favored),
   };
   if (useFractionalProgression()) {

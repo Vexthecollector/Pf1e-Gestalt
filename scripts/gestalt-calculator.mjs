@@ -77,6 +77,12 @@ export function calculateGestaltLevelProgression(
   { getItem, getStats, fixedStats = [] },
 ) {
   const totals = { level: 0, hitDice: 0, bab: 0, saves: { fort: 0, ref: 0, will: 0 } };
+  const tracks = {
+    main: { bab: 0, saves: { fort: 0, ref: 0, will: 0 } },
+    secondary: { bab: 0, saves: { fort: 0, ref: 0, will: 0 } },
+  };
+  const selected = { bab: 0, saves: { fort: 0, ref: 0, will: 0 } };
+  const rows = [];
   const occurrences = new Map();
   const advance = (item) => {
     if (!item) return null;
@@ -88,23 +94,40 @@ export function calculateGestaltLevelProgression(
   for (const row of levels) {
     const main = getItem(row.mainClassId) ?? null;
     const secondary = getItem(row.secondaryClassId) ?? null;
-    if (!main && !secondary) continue;
     const mainStats = advance(main) ?? { hitDice: 0, bab: 0, fort: 0, ref: 0, will: 0 };
     const secondaryStats = advance(secondary) ?? { hitDice: 0, bab: 0, fort: 0, ref: 0, will: 0 };
+    const gained = { bab: 0, fort: 0, ref: 0, will: 0 };
+    if (!main && !secondary) {
+      rows.push(gained);
+      continue;
+    }
     totals.level += 1;
     totals.hitDice += Math.max(Number(mainStats.hitDice) || 0, Number(secondaryStats.hitDice) || 0);
-    totals.bab += Math.max(Number(mainStats.bab) || 0, Number(secondaryStats.bab) || 0);
+
+    tracks.main.bab += Number(mainStats.bab) || 0;
+    tracks.secondary.bab += Number(secondaryStats.bab) || 0;
+    const nextBAB = Math.max(tracks.main.bab, tracks.secondary.bab);
+    gained.bab = nextBAB - selected.bab;
+    selected.bab = nextBAB;
     for (const save of ["fort", "ref", "will"]) {
-      totals.saves[save] += Math.max(Number(mainStats[save]) || 0, Number(secondaryStats[save]) || 0);
+      tracks.main.saves[save] += Number(mainStats[save]) || 0;
+      tracks.secondary.saves[save] += Number(secondaryStats[save]) || 0;
+      const nextSave = Math.max(tracks.main.saves[save], tracks.secondary.saves[save]);
+      gained[save] = nextSave - selected.saves[save];
+      selected.saves[save] = nextSave;
     }
+    rows.push(gained);
   }
+
+  totals.bab = selected.bab;
+  totals.saves = { ...selected.saves };
 
   for (const stats of fixedStats) {
     totals.hitDice += Number(stats.hitDice) || 0;
     totals.bab += Number(stats.bab) || 0;
     for (const save of ["fort", "ref", "will"]) totals.saves[save] += Number(stats[save]) || 0;
   }
-  return totals;
+  return { ...totals, rows };
 }
 
 /** Select the higher per-level health result while consuming any maximized
