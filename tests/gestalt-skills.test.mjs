@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { calculateGestaltSkillRanks } from "../scripts/gestalt-skills.mjs";
+import { calculateGestaltSkillRanks, calculateSkillRankDisplay } from "../scripts/gestalt-skills.mjs";
 
 function cls(id, skillsPerLevel, { level = 1, track = "main", subtype = "base", favored = 0 } = {}) {
   return {
@@ -76,4 +76,27 @@ test("mindless characters receive only explicitly recorded favored ranks", () =>
     { mindless: true, useBackgroundSkills: true },
   );
   assert.deepEqual(result, { adventure: 1, background: 0, favored: 1 });
+});
+
+test("uses the actual custom hit-die gain at each class level", () => {
+  const classItem = cls("template", 4, { level: 2 });
+  const result = calculateGestaltSkillRanks(
+    [
+      { mainClassId: "template", secondaryClassId: null },
+      { mainClassId: "template", secondaryClassId: null },
+    ],
+    [classItem],
+    { getHitDice: (_item, level) => level === 1 ? 0 : 2 },
+  );
+  assert.deepEqual(result, { adventure: 8, background: 0, favored: 0 });
+});
+
+test("applies background-rank transfers to both displayed allowances", () => {
+  assert.deepEqual(
+    calculateSkillRankDisplay(
+      { adventure: 20, background: 6 },
+      { backgroundUsed: 9, useBackgroundSkills: true },
+    ),
+    { adventure: 17, background: 9, transferred: 3 },
+  );
 });

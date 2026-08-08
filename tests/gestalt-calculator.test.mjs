@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  calculateClassHealth,
   calculateGestaltLevelProgression,
   isFixedClass,
   selectGestaltLevelHealth,
@@ -160,7 +161,7 @@ test("a maximized opportunity is consumed even when manual HP wins the level", (
       { value: 6, maximized: true },
       { value: 8, maximized: false },
     ),
-    { value: 8, consumesMaximized: true },
+    { value: 8, consumesMaximized: 1 },
   );
 });
 
@@ -170,6 +171,37 @@ test("adds favored HP from both classes after selecting the better health", () =
       { value: 12, favored: 1, maximized: true },
       { value: 6, favored: 1, maximized: true },
     ),
-    { value: 14, consumesMaximized: true },
+    { value: 14, consumesMaximized: 1 },
   );
+});
+
+test("consumes every maximized hit die gained at one class level", () => {
+  assert.deepEqual(
+    selectGestaltLevelHealth(
+      { value: 16, favored: 0, maximized: 2 },
+      { value: 12, favored: 0, maximized: 1 },
+    ),
+    { value: 16, consumesMaximized: 2 },
+  );
+});
+
+test("reconstructs standard maximized HP in PF1 class sort order", () => {
+  const healthConfig = {
+    rounding: "nearest",
+    continuous: false,
+    maximized: 1,
+    getActorConfig: () => ({
+      classes: {
+        racial: { auto: true, rate: 0.5, maximized: true },
+        base: { auto: true, rate: 0.5, maximized: true },
+        npc: { auto: true, rate: 0.5, maximized: true },
+      },
+    }),
+  };
+  const classes = [
+    { sort: 20, subType: "base", hitDice: 1, system: { hd: 12, level: 1, fc: { hp: { value: 0 } } } },
+    { sort: 10, subType: "base", hitDice: 1, system: { hd: 6, level: 1, fc: { hp: { value: 0 } } } },
+  ];
+
+  assert.equal(calculateClassHealth(classes, healthConfig), 13);
 });

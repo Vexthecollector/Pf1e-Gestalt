@@ -14,7 +14,7 @@ import {
   reconcileLevelArray,
   swapLevelAssignments,
 } from "./gestalt-levels.mjs";
-import { calculateGestaltSkillRanks } from "./gestalt-skills.mjs";
+import { calculateGestaltSkillRanks, calculateSkillRankDisplay } from "./gestalt-skills.mjs";
 import { replaceSourceEntries, updateSourceEntry } from "./gestalt-sources.mjs";
 
 const MODULE_ID = "pf1-gestalt";
@@ -191,6 +191,7 @@ for (const hook of [
 }
 
 Hooks.on("renderLevelUpForm", adjustGestaltLevelUpForm);
+Hooks.on("renderPF1ExtendedTooltip", enhanceGestaltExtendedTooltip);
 
 function adjustGestaltLevelUpForm(app, html) {
   const actor = app.actor;
@@ -336,6 +337,7 @@ function actorGestaltSkillRanks(actor) {
     useBackgroundSkills: game.settings.get("pf1", "allowBackgroundSkills") === true,
     backgroundClasses: pf1.config.backgroundSkillClasses,
     backgroundPerLevel: pf1.config.backgroundSkillsPerLevel,
+    getHitDice: classLevelHitDice,
   });
   result.adventure += Number(actor.system.details?.skills?.bonus) || 0;
   return result;
@@ -351,22 +353,99 @@ function adjustCharacterSkillRanks(element, actor) {
 
   const used = Number(adventure.querySelector(".used .value")?.textContent) || 0;
   const bgUsed = Number(background?.querySelector(".used .value")?.textContent) || 0;
-  let allowed = ranks.adventure;
-  let bgAllowed = ranks.background;
-  let sentToBackground = 0;
-  if (background && bgUsed > bgAllowed) {
-    sentToBackground = bgUsed - bgAllowed;
-    allowed -= sentToBackground;
-    bgAllowed += sentToBackground;
-  }
+  const displayed = calculateSkillRankDisplay(ranks, {
+    backgroundUsed: bgUsed,
+    useBackgroundSkills: Boolean(background),
+  });
 
   const allowedValue = adventure.querySelector(".available .value");
   const usedValue = adventure.querySelector(".used .value");
   const bgAllowedValue = background?.querySelector(".available .value");
-  if (allowedValue) allowedValue.textContent = String(allowed);
+  if (allowedValue) allowedValue.textContent = String(displayed.adventure);
   if (usedValue) usedValue.textContent = String(used);
-  if (bgAllowedValue) bgAllowedValue.textContent = String(bgAllowed);
-  if (transferred) transferred.textContent = String(sentToBackground);
+  if (bgAllowedValue) bgAllowedValue.textContent = String(displayed.background);
+  if (transferred) transferred.textContent = String(displayed.transferred);
+}
+
+function enhanceGestaltExtendedTooltip(sheet, id, template) {
+  const actor = sheet.actor;
+  if (
+    actor?.type !== "character"
+    || !["skills.adventure", "skills.background"].includes(id)
+    || !actor.itemTypes.class.some((item) => !isFixedClass(item) && getTrack(item) === TRACK.SECONDARY)
+  ) return;
+
+  const ranks = actorGestaltSkillRanks(actor);
+  const useBackgroundSkills = game.settings.get("pf1", "allowBackgroundSkills") === true;
+  const displayed = calculateSkillRankDisplay(ranks, {
+    backgroundUsed: usedSkillRanks(actor).background,
+    useBackgroundSkills,
+  });
+  const bonus = Number(actor.system.details?.skills?.bonus) || 0;
+  const entries = id === "skills.background"
+    ? [{ name: localize("PF1GESTALT.Source.GestaltClasses"), value: ranks.background }]
+    : [{ name: localize("PF1GESTALT.Source.GestaltClasses"), value: ranks.adventure - bonus }];
+
+  if (id === "skills.adventure") {
+    const bonusSources = actor.getSourceDetails("system.details.skills.bonus") ?? [];
+    let describedBonus = 0;
+    for (const source of bonusSources) {
+      const value = Number(source.value) || 0;
+      if (!value || source.disabled) continue;
+      entries.push({ name: source.name, value });
+      describedBonus += value;
+    }
+    if (bonus !== describedBonus) {
+      entries.push({ name: localize("PF1.BuffTarBonusSkillRanks"), value: bonus - describedBonus });
+    }
+  }
+  if (displayed.transferred) {
+    entries.push({
+      name: localize("PF1.Transferred"),
+      value: id === "skills.background" ? displayed.transferred : -displayed.transferred,
+    });
+  }
+  replaceTooltipSources(template, entries);
+}
+
+function usedSkillRanks(actor) {
+  const result = { adventure: 0, background: 0 };
+  const skills = actor.getRollData?.().skills ?? {};
+  const add = (skill, rank) => {
+    const key = skill.background ? "background" : "adventure";
+    result[key] += Number(rank) || 0;
+  };
+  for (const skill of Object.values(skills)) {
+    if (skill.subSkills != null) {
+      for (const subSkill of Object.values(skill.subSkills)) add(skill, subSkill.rank);
+    }
+    else add(skill, skill.rank);
+  }
+  return result;
+}
+
+function replaceTooltipSources(template, entries) {
+  const heading = [...template.content.querySelectorAll("h4")]
+    .find((element) => element.textContent.trim() === localize("PF1.FromSources"));
+  if (!heading) return;
+  const notes = template.content.querySelector("ul.notes");
+  let node = heading.nextSibling;
+  while (node && node !== notes) {
+    const next = node.nextSibling;
+    node.remove();
+    node = next;
+  }
+  const fragment = document.createDocumentFragment();
+  for (const entry of entries.filter((source) => Number(source.value) !== 0)) {
+    const flavor = document.createElement("span");
+    flavor.className = "flavor";
+    flavor.textContent = entry.name;
+    const value = document.createElement("span");
+    value.className = "value untyped";
+    value.textContent = signed(entry.value);
+    fragment.append(flavor, value);
+  }
+  template.content.insertBefore(fragment, notes);
 }
 
 function addCatchUpLevelButtons(app, classesBody, actor) {
@@ -406,7 +485,7 @@ function calculateArrayProgression(actor, classes, levels, fractional) {
     getItem: (id) => actor.items.get(id),
     getStats: (item, level) => ({
       ...classLevelStatistics(item, level, false),
-      hitDice: 1,
+      hitDice: classLevelHitDice(item, level),
     }),
     fixedStats: fixed.map((item) => ({
       hitDice: Number(item.hitDice ?? item.system?.hitDice) || 0,
@@ -472,7 +551,7 @@ function calculateArrayHealth(actor, classes, levels, healthConfig) {
   // paths are also fixed and remain additive rather than occupying a slot.
   const fixed = classes.filter(isFixedClass).sort((a, b) => {
     const priority = (item) => getClassSubtype(item) === "racial" ? 0 : 1;
-    return priority(a) - priority(b);
+    return priority(a) - priority(b) || (Number(a.sort) || 0) - (Number(b.sort) || 0);
   });
   for (const item of fixed) {
     gestalt += fixedClassHealth(item, healthConfig, actorConfig, state, round);
@@ -494,7 +573,7 @@ function calculateArrayHealth(actor, classes, levels, healthConfig) {
     );
     const selected = selectGestaltLevelHealth(mainHealth, secondaryHealth);
     gestalt += selected.value;
-    if (selected.consumesMaximized) state.remainingMaximized -= 1;
+    state.remainingMaximized -= selected.consumesMaximized;
   }
 
   if (!healthConfig.continuous) gestalt = round(gestalt);
@@ -511,33 +590,39 @@ function fixedClassHealth(item, healthConfig, actorConfig, state, round) {
   if (subtype === "mythic") return (Number(item.system?.hd) || 0) * (Number(item.system?.level) || 0);
 
   let total = 0;
-  const count = Math.max(0, Number(item.hitDice ?? item.system?.hitDice) || 0);
+  const count = Math.max(0, Number(item.system?.level) || 0);
   for (let level = 1; level <= count; level++) {
     const result = levelHealth(item, level, healthConfig, actorConfig, state, round);
     total += result.value;
-    if (result.maximized) state.remainingMaximized -= 1;
+    state.remainingMaximized -= result.maximized;
   }
   return total;
 }
 
-function levelHealth(item, _classLevel, healthConfig, actorConfig, state, round) {
-  if (!item) return { value: 0, maximized: false };
+function levelHealth(item, classLevel, healthConfig, actorConfig, state, round) {
+  if (!item) return { value: 0, favored: 0, maximized: 0 };
   const subtype = getClassSubtype(item);
   const config = subtype === "npc" ? actorConfig.classes.npc : actorConfig.classes.base;
-  const hitDice = Math.max(1, Number(item.hitDice ?? item.system?.hitDice ?? item.system?.level) || 1);
+  const totalHitDice = Math.max(0, Number(item.hitDice ?? item.system?.hitDice) || 0);
+  const hitDice = classLevelHitDice(item, classLevel);
+  const classLevels = Math.max(1, Number(item.system?.level) || 1);
   const favored = ["base", "prestige", "npc"].includes(subtype)
-    ? (Number(item.system?.fc?.hp?.value) || 0) / hitDice
+    ? (Number(item.system?.fc?.hp?.value) || 0) / classLevels
     : 0;
 
   if (!config.auto) {
     const total = Number(item.system?.hp) || 0;
-    return { value: total / hitDice, favored, maximized: false };
+    const value = totalHitDice > 0 ? total * hitDice / totalHitDice : 0;
+    return { value, favored, maximized: 0 };
   }
 
   const die = Number(item.system?.hd) || 0;
-  const maximized = config.maximized === true && state.remainingMaximized > 0;
-  let value = maximized ? die : 1 + (die - 1) * config.rate;
-  if (!healthConfig.continuous) value = round(value);
+  const maximized = config.maximized === true
+    ? Math.min(hitDice, Math.max(0, state.remainingMaximized))
+    : 0;
+  let ordinary = 1 + (die - 1) * config.rate;
+  if (!healthConfig.continuous) ordinary = round(ordinary);
+  const value = maximized * die + Math.max(0, hitDice - maximized) * ordinary;
   return { value, favored, maximized };
 }
 
@@ -573,7 +658,7 @@ function enhanceGestaltPage(app, element, actor) {
     getItem: (id) => actor.items.get(id),
     getStats: (item, level) => ({
       ...classLevelStatistics(item, level, false),
-      hitDice: 1,
+      hitDice: classLevelHitDice(item, level),
     }),
   });
   for (const level of levels) {
@@ -743,7 +828,7 @@ function statisticsRow(
   const mainSkills = classLevelSkillRanks(actor, main, mainLevel);
   const secondarySkills = classLevelSkillRanks(actor, secondary, secondaryLevel);
   const gained = {
-    hd: Math.max(mainStats.hd, secondaryStats.hd),
+    hitDie: formatHitDieGain(mainStats, secondaryStats),
     bab: progressionGain?.bab ?? 0,
     fort: progressionGain?.fort ?? 0,
     ref: progressionGain?.ref ?? 0,
@@ -770,7 +855,7 @@ function statisticsRow(
   name.append(heading);
   row.append(
     name,
-    statCell("PF1GESTALT.Level.HitDie", gained.hd ? `d${gained.hd}` : "—"),
+    statCell("PF1GESTALT.Level.HitDie", gained.hitDie),
     statCell("PF1.BAB", signed(gained.bab)),
     statCell("PF1.SavingThrowFort", signed(gained.fort)),
     statCell("PF1.SavingThrowRef", signed(gained.ref)),
@@ -780,20 +865,33 @@ function statisticsRow(
   return row;
 }
 
+function formatHitDieGain(main, secondary) {
+  const hitDice = Math.max(Number(main.hitDice) || 0, Number(secondary.hitDice) || 0);
+  if (!hitDice) return "—";
+  const die = Math.max(
+    (Number(main.hitDice) || 0) === hitDice ? Number(main.hd) || 0 : 0,
+    (Number(secondary.hitDice) || 0) === hitDice ? Number(secondary.hd) || 0 : 0,
+  );
+  if (!die) return String(hitDice);
+  return `${hitDice > 1 ? hitDice : ""}d${die}`;
+}
+
 function classLevelSkillRanks(actor, item, classLevel) {
   if (!item || !classLevel) return { base: 0, favored: 0 };
   const intelligence = actor.system.abilities?.int;
   const favored = (Number(item.system?.fc?.skill?.value) || 0) >= classLevel ? 1 : 0;
   if (intelligence?.value === null) return { base: 0, favored };
-  const base = Math.max(1, (Number(item.system?.skillsPerLevel) || 0) + (Number(intelligence?.mod) || 0));
+  const base = Math.max(1, (Number(item.system?.skillsPerLevel) || 0) + (Number(intelligence?.mod) || 0))
+    * classLevelHitDice(item, classLevel);
   return { base, favored };
 }
 
 function classLevelStatistics(item, level, includeFractionalGoodBonus = true) {
-  if (!item || !level) return { hd: 0, bab: 0, fort: 0, ref: 0, will: 0 };
+  if (!item || !level) return { hd: 0, hitDice: 0, bab: 0, fort: 0, ref: 0, will: 0 };
   const fractional = useFractionalProgression();
   const result = {
     hd: Number(item.system.hd) || 0,
+    hitDice: classLevelHitDice(item, level),
     bab: cumulativeBAB(item, level, fractional) - cumulativeBAB(item, level - 1, fractional),
     babRank: progressionRank(item.system.bab, { low: 1, med: 2, high: 3 }),
   };
@@ -820,7 +918,7 @@ function cumulativeBAB(item, level, fractional) {
   const type = item.system.bab;
   const formulas = fractional ? pf1.config.classFractionalBABFormulas : pf1.config.classBABFormulas;
   const formula = type === "custom" ? item.system.babFormula || "0" : formulas[type] || "0";
-  return evaluateClassFormula(formula, level);
+  return evaluateClassFormula(formula, level, cumulativeClassHitDice(item, level));
 }
 
 function cumulativeSave(item, save, level, fractional) {
@@ -829,11 +927,26 @@ function cumulativeSave(item, save, level, fractional) {
   const subtype = item.subType ?? item.system.subType ?? "base";
   const formulas = fractional ? pf1.config.classFractionalSavingThrowFormulas : pf1.config.classSavingThrowFormulas;
   const formula = saveData?.value === "custom" ? saveData.custom || "0" : formulas[subtype]?.[saveData?.value] || "0";
-  return evaluateClassFormula(formula, level);
+  return evaluateClassFormula(formula, level, cumulativeClassHitDice(item, level));
 }
 
-function evaluateClassFormula(formula, level) {
-  return Number(pf1.dice.RollPF.safeRollSync(formula, { level, hitDice: level }).total) || 0;
+function evaluateClassFormula(formula, level, hitDice = level) {
+  return Number(pf1.dice.RollPF.safeRollSync(formula, { level, hitDice }).total) || 0;
+}
+
+function cumulativeClassHitDice(item, level) {
+  if (!item || level <= 0 || getClassSubtype(item) === "mythic") return 0;
+  const formula = item.system?.customHD;
+  if (typeof formula === "string" && formula.trim()) {
+    const result = pf1.dice.RollPF.safeRollSync(formula, { item: { level } }).total;
+    return Math.max(0, Number(result) || 0);
+  }
+  return level;
+}
+
+function classLevelHitDice(item, level) {
+  if (!item || level <= 0) return 0;
+  return Math.max(0, cumulativeClassHitDice(item, level) - cumulativeClassHitDice(item, level - 1));
 }
 
 function nextClassLevel(levels, item) {

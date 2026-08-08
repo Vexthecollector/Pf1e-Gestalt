@@ -51,13 +51,16 @@ export function calculateClassHealth(classes, healthConfig, actorType = "charact
     return health + favoredHp;
   };
 
+  // PF1 sorts class items before dividing them into health categories. This
+  // determines which hit dice consume the limited maximized-HD allowance.
+  const sorted = [...classes].sort((a, b) => (Number(a.sort) || 0) - (Number(b.sort) || 0));
   const categories = [
-    [classes.filter((item) => getClassSubtype(item) === "racial"), actorConfig.classes.racial],
+    [sorted.filter((item) => getClassSubtype(item) === "racial"), actorConfig.classes.racial],
     [
-      classes.filter((item) => !["racial", "npc"].includes(getClassSubtype(item))),
+      sorted.filter((item) => !["racial", "npc"].includes(getClassSubtype(item))),
       actorConfig.classes.base,
     ],
-    [classes.filter((item) => getClassSubtype(item) === "npc"), actorConfig.classes.npc],
+    [sorted.filter((item) => getClassSubtype(item) === "npc"), actorConfig.classes.npc],
   ];
 
   let total = 0;
@@ -141,6 +144,6 @@ export function selectGestaltLevelHealth(main, secondary) {
   const selected = main.value >= secondary.value ? main : secondary;
   return {
     value: selected.value + (Number(main.favored) || 0) + (Number(secondary.favored) || 0),
-    consumesMaximized: main.maximized === true || secondary.maximized === true,
+    consumesMaximized: Math.max(Number(main.maximized) || 0, Number(secondary.maximized) || 0),
   };
 }

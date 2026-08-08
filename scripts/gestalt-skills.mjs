@@ -15,6 +15,7 @@ export function calculateGestaltSkillRanks(
     useBackgroundSkills = false,
     backgroundClasses = ["base", "prestige"],
     backgroundPerLevel = 2,
+    getHitDice = () => 1,
   } = {},
 ) {
   const levels = normalizeLevelArray(value);
@@ -32,6 +33,7 @@ export function calculateGestaltSkillRanks(
       useBackgroundSkills,
       backgroundClasses,
       backgroundPerLevel,
+      hitDice: getHitDice(item, classLevel),
     });
   };
 
@@ -46,14 +48,15 @@ export function calculateGestaltSkillRanks(
   // Racial hit dice remain additive and do not occupy gestalt rows. Mythic
   // tiers grant no ordinary skill ranks in PF1e.
   for (const item of classes.filter((entry) => isFixedClass(entry) && getClassSubtype(entry) !== "mythic")) {
-    const hitDice = Math.max(0, Number(item.hitDice ?? item.system?.hitDice) || 0);
-    for (let classLevel = 1; classLevel <= hitDice; classLevel++) {
+    const classLevels = Math.max(0, Number(item.system?.level) || 0);
+    for (let classLevel = 1; classLevel <= classLevels; classLevel++) {
       const ranks = levelRanks(item, classLevel, {
         intMod,
         mindless,
         useBackgroundSkills,
         backgroundClasses,
         backgroundPerLevel,
+        hitDice: getHitDice(item, classLevel),
       });
       result.adventure += ranks.adventure;
       result.background += ranks.background;
@@ -65,10 +68,26 @@ export function calculateGestaltSkillRanks(
   return result;
 }
 
+/** Apply PF1's adventure-to-background transfer after base allowances have
+ * been calculated. */
+export function calculateSkillRankDisplay(ranks, { backgroundUsed = 0, useBackgroundSkills = false } = {}) {
+  const result = {
+    adventure: Number(ranks?.adventure) || 0,
+    background: Number(ranks?.background) || 0,
+    transferred: 0,
+  };
+  if (useBackgroundSkills && backgroundUsed > result.background) {
+    result.transferred = backgroundUsed - result.background;
+    result.adventure -= result.transferred;
+    result.background += result.transferred;
+  }
+  return result;
+}
+
 function levelRanks(
   item,
   classLevel,
-  { intMod, mindless, useBackgroundSkills, backgroundClasses, backgroundPerLevel },
+  { intMod, mindless, useBackgroundSkills, backgroundClasses, backgroundPerLevel, hitDice },
 ) {
   const subtype = getClassSubtype(item) ?? "base";
   const favoredTotal = Number(item.system?.fc?.skill?.value) || 0;
@@ -76,9 +95,10 @@ function levelRanks(
   if (mindless) return { adventure: 0, background: 0, favored };
 
   const perLevel = Number(item.system?.skillsPerLevel) || 0;
-  const adventure = Math.max(1, perLevel + (Number(intMod) || 0));
+  const hd = Math.max(0, Number(hitDice) || 0);
+  const adventure = Math.max(1, perLevel + (Number(intMod) || 0)) * hd;
   const background = useBackgroundSkills && backgroundClasses.includes(subtype)
-    ? Math.max(0, Number(backgroundPerLevel) || 0)
+    ? Math.max(0, Number(backgroundPerLevel) || 0) * hd
     : 0;
   return { adventure, background, favored };
 }
