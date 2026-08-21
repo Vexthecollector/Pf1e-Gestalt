@@ -9,6 +9,7 @@ import {
 } from "./gestalt-calculator.mjs";
 import {
   createLevelArray,
+  isValidGestaltDrop,
   LEVELS_FLAG,
   normalizeLevelArray,
   reconcileLevelArray,
@@ -205,28 +206,19 @@ function adjustGestaltLevelUpForm(app, html) {
   if (catchUp) {
     // PF1e looks up ASIs from the preview actor's total HD without checking
     // whether HD actually increased. A catch-up level fills an existing
-    // gestalt row, so suppress repeated milestone and favored-class rewards.
+    // gestalt row, so suppress repeated milestone rewards.
     app.config.abilityScore.new = 0;
     app.config.abilityScore.used = 0;
     for (const ability of Object.values(app.config.abilityScore.upgrades ?? {})) ability.added = 0;
-    app.config.fcb.choice = "none";
-    app.config.fcb.available = false;
-    app.config.fcb.unavailable = true;
     replaceLevelUpSegment(
       element,
       ".segment.ability-score",
       "PF1.LevelUp.AbilityScore.Label",
       "PF1GESTALT.LevelUp.CatchUpASI",
     );
-    replaceLevelUpSegment(
-      element,
-      ".segment.fcb",
-      "PF1.LevelUp.FC.Label",
-      "PF1GESTALT.LevelUp.CatchUpFCB",
-    );
   }
 
-  adjustLevelUpSkillRanks(app, element, catchUp);
+  adjustLevelUpSkillRanks(app, element);
   const submit = element?.querySelector("button[type='submit'][data-action='commit']");
   if (submit && typeof app.isReady === "function") submit.disabled = !app.isReady();
 }
@@ -242,11 +234,11 @@ function replaceLevelUpSegment(element, selector, headingKey, noteKey) {
   segment.replaceChildren(heading, note);
 }
 
-function adjustLevelUpSkillRanks(app, element, catchUp) {
+function adjustLevelUpSkillRanks(app, element) {
   if (!app.simulacra || !app.config.skills) return;
   const oldRanks = actorGestaltSkillRanks(app.actor);
   const newRanks = actorGestaltSkillRanks(app.simulacra);
-  const pendingFavoredRank = !catchUp && app.config.fcb.choice === "skill" ? 1 : 0;
+  const pendingFavoredRank = app.config.fcb.choice === "skill" ? 1 : 0;
   const adventureDelta = newRanks.adventure - oldRanks.adventure + pendingFavoredRank;
   const backgroundDelta = newRanks.background - oldRanks.background;
   app.config.skills.old = { value: oldRanks.adventure, bg: oldRanks.background };
@@ -773,6 +765,7 @@ function activateGestaltDragAndDrop(row, app, actor) {
     event.dataTransfer.effectAllowed = "move";
     draggedGestaltSlot = {
       type: "pf1-gestalt-slot",
+      actorId: actor.id,
       index: Number(row.dataset.gestaltLevelIndex),
       track: row.dataset.gestaltTrack,
     };
@@ -783,7 +776,10 @@ function activateGestaltDragAndDrop(row, app, actor) {
     row.classList.remove("pf1-gestalt-dragging");
   });
   row.addEventListener("dragover", (event) => {
-    if (draggedGestaltSlot?.track !== row.dataset.gestaltTrack) return;
+    if (!isValidGestaltDrop(draggedGestaltSlot, {
+      actorId: actor.id,
+      track: row.dataset.gestaltTrack,
+    })) return;
     event.preventDefault();
     event.stopPropagation();
     event.dataTransfer.dropEffect = "move";
@@ -801,12 +797,12 @@ function activateGestaltDragAndDrop(row, app, actor) {
     catch (_error) {
       return;
     }
-    if (source?.type !== "pf1-gestalt-slot") return;
     const target = {
+      actorId: actor.id,
       index: Number(row.dataset.gestaltLevelIndex),
       track: row.dataset.gestaltTrack,
     };
-    if (source.track !== target.track) return;
+    if (!isValidGestaltDrop(source, target)) return;
     const current = actor.getFlag(MODULE_ID, LEVELS_FLAG);
     await actor.setFlag(MODULE_ID, LEVELS_FLAG, swapLevelAssignments(current, source, target));
     reactivateGestaltTab.add(app);

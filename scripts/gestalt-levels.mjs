@@ -65,6 +65,16 @@ export function swapLevelAssignments(value, source, target) {
   return normalizeLevelArray(levels);
 }
 
+/** Confirm that a drag source belongs to the same actor and track as its
+ * target before changing any stored assignments. */
+export function isValidGestaltDrop(source, target) {
+  return source?.type === "pf1-gestalt-slot"
+    && typeof source.actorId === "string"
+    && source.actorId.length > 0
+    && source.actorId === target?.actorId
+    && source.track === target?.track;
+}
+
 /**
  * Match stored slots to current class levels without discarding the player's
  * level ordering. Missing levels fill the first open slot on their track.

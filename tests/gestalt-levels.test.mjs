@@ -2,10 +2,19 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   createLevelArray,
+  isValidGestaltDrop,
   normalizeLevelArray,
   reconcileLevelArray,
   swapLevelAssignments,
 } from "../scripts/gestalt-levels.mjs";
+
+test("accepts gestalt drops only within the same actor and track", () => {
+  const source = { type: "pf1-gestalt-slot", actorId: "actor-a", index: 0, track: "main" };
+  assert.equal(isValidGestaltDrop(source, { actorId: "actor-a", index: 1, track: "main" }), true);
+  assert.equal(isValidGestaltDrop(source, { actorId: "actor-b", index: 1, track: "main" }), false);
+  assert.equal(isValidGestaltDrop(source, { actorId: "actor-a", index: 1, track: "secondary" }), false);
+  assert.equal(isValidGestaltDrop({ ...source, actorId: undefined }, { actorId: "actor-a", track: "main" }), false);
+});
 
 function cls(id, level, track, subType = "base", sort = 0) {
   return {
