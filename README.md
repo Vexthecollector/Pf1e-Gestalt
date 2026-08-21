@@ -2,7 +2,7 @@
 
 A Foundry VTT module for running gestalt characters with the Pathfinder First Edition system.
 
-[Download the latest release](https://github.com/Vexthecollector/Pf1e-Gestalt/releases/latest)
+[![Release v0.4.11](https://img.shields.io/badge/release-v0.4.11-blue?logo=github)](https://github.com/Vexthecollector/Pf1e-Gestalt/releases/latest)
 ![Foundry VTT](https://img.shields.io/badge/Foundry_VTT-13--14-5c2b75)
 ![PF1e](https://img.shields.io/badge/PF1e-11.x-2f6f8f)
 
