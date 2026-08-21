@@ -1,11 +1,48 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  calculateCumulativeHitDice,
   calculateClassHealth,
+  calculateGestaltClassHealth,
   calculateGestaltLevelProgression,
+  getStoredTrack,
+  getTrack,
   isFixedClass,
   selectGestaltLevelHealth,
+  shorterClassTrack,
 } from "../scripts/gestalt-calculator.mjs";
+
+test("distinguishes stored tracks and balances newly added classes", () => {
+  const cls = (id, level, track) => ({
+    id,
+    flags: track ? { "pf1-gestalt": { track } } : {},
+    system: { level, subType: "base" },
+  });
+  const unassigned = cls("new", 0, null);
+  assert.equal(getStoredTrack(unassigned), null);
+  assert.equal(getTrack(unassigned), "main");
+  assert.equal(shorterClassTrack([]), "main");
+  assert.equal(shorterClassTrack([cls("fighter", 2, "main")]), "secondary");
+  assert.equal(shorterClassTrack([
+    cls("fighter", 2, "main"),
+    cls("wizard", 2, "secondary"),
+  ]), "main");
+  assert.equal(shorterClassTrack([
+    cls("fighter", 2, "main"),
+    cls("wizard", 2, "secondary"),
+  ], null), null);
+});
+
+test("evaluates named and custom hit-die progressions cumulatively", () => {
+  const evaluateFormula = (_formula, data) => data.level * 0.75 + 1;
+  const progressions = { animal: { formula: "animal progression" } };
+  const animal = { system: { subType: "base", progression: "animal" } };
+  const custom = { system: { subType: "base", progression: "custom", customHD: "custom progression" } };
+
+  assert.equal(calculateCumulativeHitDice(animal, 4, { progressions, evaluateFormula }), 4);
+  assert.equal(calculateCumulativeHitDice(custom, 2, { progressions, evaluateFormula }), 2.5);
+  assert.equal(calculateCumulativeHitDice({ system: { subType: "base" } }, 3), 3);
+});
 
 test("detects fixed classes from live-item and plain-object shapes", () => {
   assert.equal(isFixedClass({ subType: "racial" }), true);
@@ -204,4 +241,77 @@ test("reconstructs standard maximized HP in PF1 class sort order", () => {
   ];
 
   assert.equal(calculateClassHealth(classes, healthConfig), 13);
+});
+
+test("uses PF1e 11.11 per-source rounding for continuous class health", () => {
+  const healthConfig = {
+    rounding: "down",
+    maximized: 0,
+    getActorConfig: () => ({
+      continuous: true,
+      classes: {
+        racial: { auto: true, rate: 0.5, maximized: false },
+        base: { auto: true, rate: 0.5, maximized: false },
+        npc: { auto: true, rate: 0.5, maximized: false },
+      },
+    }),
+  };
+  const classes = ["fighter", "wizard"].map((id) => ({
+    id,
+    hitDice: 1,
+    system: { subType: "base", hd: 8, level: 1, fc: { hp: { value: 0 } } },
+  }));
+
+  assert.equal(calculateClassHealth(classes, healthConfig), 8);
+});
+
+test("retains PF1e 11.8 aggregate continuous class health", () => {
+  const healthConfig = {
+    continuous: true,
+    rounding: "down",
+    maximized: 0,
+    getActorConfig: () => ({
+      classes: {
+        racial: { auto: true, rate: 0.5, maximized: false },
+        base: { auto: true, rate: 0.5, maximized: false },
+        npc: { auto: true, rate: 0.5, maximized: false },
+      },
+    }),
+  };
+  const classes = ["fighter", "wizard"].map((id) => ({
+    id,
+    hitDice: 1,
+    system: { subType: "base", hd: 8, level: 1, fc: { hp: { value: 0 } } },
+  }));
+
+  assert.equal(calculateClassHealth(classes, healthConfig), 9);
+});
+
+test("rounds fixed and paired health as separate PF1e 11.11 sources", () => {
+  const healthConfig = {
+    rounding: "down",
+    maximized: 0,
+    getActorConfig: () => ({
+      continuous: true,
+      classes: {
+        racial: { auto: true, rate: 0.5, maximized: false },
+        base: { auto: true, rate: 0.5, maximized: false },
+        npc: { auto: true, rate: 0.5, maximized: false },
+      },
+    }),
+  };
+  const classes = [
+    { id: "racial", hitDice: 1, system: { subType: "racial", hd: 8, level: 1 } },
+    { id: "fighter", hitDice: 1, system: { subType: "base", hd: 8, level: 1 } },
+    { id: "wizard", hitDice: 1, system: { subType: "base", hd: 8, level: 1 } },
+  ];
+  const byId = new Map(classes.map((item) => [item.id, item]));
+  const result = calculateGestaltClassHealth(
+    classes,
+    [{ mainClassId: "fighter", secondaryClassId: "wizard" }],
+    healthConfig,
+    { getItem: (id) => byId.get(id), getHitDice: () => 1 },
+  );
+
+  assert.deepEqual(result, { standard: 12, gestalt: 8 });
 });

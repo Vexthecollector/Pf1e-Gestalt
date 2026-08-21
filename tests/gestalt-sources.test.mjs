@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { replaceSourceEntries, updateSourceEntry } from "../scripts/gestalt-sources.mjs";
+import {
+  isBuiltInClassSource,
+  replaceSourceEntries,
+  updateSourceEntry,
+} from "../scripts/gestalt-sources.mjs";
 
 test("replaces only matching class source entries", () => {
   const sourceInfo = {
@@ -49,4 +53,18 @@ test("updates the Constitution source without changing other entries", () => {
     { name: "Constitution", value: 3 },
     { name: "Gestalt Classes", value: 16 },
   ]);
+});
+
+test("recognizes only built-in class, save, and favored-class sources", () => {
+  const options = {
+    classNames: new Set(["Fighter"]),
+    extraNames: new Set(["Base", "Fighter (Favoured Class)"]),
+  };
+
+  assert.equal(isBuiltInClassSource({ builtIn: true, item: { type: "class" } }, options), true);
+  assert.equal(isBuiltInClassSource({ builtIn: true, name: "Fighter" }, options), true);
+  assert.equal(isBuiltInClassSource({ builtIn: true, name: "Base" }, options), true);
+  assert.equal(isBuiltInClassSource({ builtIn: true, name: "Fighter (Favoured Class)" }, options), true);
+  assert.equal(isBuiltInClassSource({ builtIn: false, name: "Fighter" }, options), false);
+  assert.equal(isBuiltInClassSource({ builtIn: true, name: "Morale" }, options), false);
 });

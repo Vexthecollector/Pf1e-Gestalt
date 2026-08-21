@@ -1,0 +1,54 @@
+name: Publish Foundry release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Run tests
+        run: npm test
+
+      - name: Validate release version
+        shell: bash
+        run: |
+          version="$(node -p "JSON.parse(require('fs').readFileSync('module.json')).version")"
+          package_version="$(node -p "JSON.parse(require('fs').readFileSync('package.json')).version")"
+          test "$GITHUB_REF_NAME" = "v$version"
+          test "$package_version" = "$version"
+
+      - name: Build Foundry package
+        id: package
+        shell: bash
+        run: |
+          version="$(node -p "JSON.parse(require('fs').readFileSync('module.json')).version")"
+          archive="pf1-gestalt-$version.zip"
+          zip -r "$archive" module.json README.md package.json scripts styles lang
+          echo "archive=$archive" >> "$GITHUB_OUTPUT"
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ARCHIVE: ${{ steps.package.outputs.archive }}
+        shell: bash
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            module.json "$ARCHIVE" \
+            --title "PF1e Gestalt $GITHUB_REF_NAME" \
+            --generate-notes \
+            --verify-tag

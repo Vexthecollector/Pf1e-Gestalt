@@ -24,3 +24,10 @@ export function updateSourceEntry(sourceInfo, path, matches, value) {
   }
   return false;
 }
+
+/** Identify PF1e's built-in class-derived sources without swallowing an
+ * unrelated bonus that merely shares a class's display name. */
+export function isBuiltInClassSource(entry, { classNames = new Set(), extraNames = new Set() } = {}) {
+  return entry?.builtIn === true
+    && (entry.item?.type === "class" || classNames.has(entry.name) || extraNames.has(entry.name));
+}

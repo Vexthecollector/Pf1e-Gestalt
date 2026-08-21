@@ -68,6 +68,16 @@ test("calculates background ranks independently from adventure ranks", () => {
   assert.deepEqual(result, { adventure: 6, background: 2, favored: 0 });
 });
 
+test("accepts PF1e 11.11 Set-based background class configuration", () => {
+  const wizard = cls("wizard", 2);
+  const result = calculateGestaltSkillRanks(
+    [{ mainClassId: "wizard", secondaryClassId: null }],
+    [wizard],
+    { useBackgroundSkills: true, backgroundClasses: new Set(["base"]) },
+  );
+  assert.deepEqual(result, { adventure: 2, background: 2, favored: 0 });
+});
+
 test("mindless characters receive only explicitly recorded favored ranks", () => {
   const rogue = cls("rogue", 8, { favored: 1 });
   const result = calculateGestaltSkillRanks(

@@ -51,7 +51,8 @@
   font-style: italic;
 }
 
-.pf1.sheet.actor.character .sheet-navigation {
+.pf1.sheet.actor.character .sheet-navigation,
+.pf1.actor.character .sheet-navigation {
   flex-wrap: wrap;
   height: auto;
 }

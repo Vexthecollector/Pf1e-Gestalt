@@ -7,15 +7,15 @@ export const LEVELS_FLAG = "levels";
  */
 export function normalizeLevelArray(value) {
   if (!Array.isArray(value)) return [];
-  return value.map((row, index) => {
+  return value.map((row) => {
     const mainClassId = row?.mainClassId || null;
     const secondaryClassId = row?.secondaryClassId === mainClassId ? null : row?.secondaryClassId || null;
     return {
-      level: index + 1,
       mainClassId,
       secondaryClassId,
     };
-  });
+  }).filter((row) => row.mainClassId || row.secondaryClassId)
+    .map((row, index) => ({ level: index + 1, ...row }));
 }
 
 /**
@@ -83,9 +83,26 @@ export function reconcileLevelArray(value, classes) {
   const levels = normalizeLevelArray(value);
   const keys = { [TRACK.MAIN]: "mainClassId", [TRACK.SECONDARY]: "secondaryClassId" };
   const desired = { [TRACK.MAIN]: new Map(), [TRACK.SECONDARY]: new Map() };
+  const desiredTrack = new Map();
 
   for (const item of classes.filter((entry) => !isFixedClass(entry))) {
-    desired[getTrack(item)].set(item.id, Math.max(0, Number(item.system?.level) || 0));
+    const track = getTrack(item);
+    desired[track].set(item.id, Math.max(0, Number(item.system?.level) || 0));
+    desiredTrack.set(item.id, track);
+  }
+
+  // Preserve the row occupied by a class when its track changes, provided the
+  // destination slot in that same gestalt level is available.
+  for (const row of levels) {
+    for (const track of [TRACK.MAIN, TRACK.SECONDARY]) {
+      const key = keys[track];
+      const id = row[key];
+      const targetTrack = desiredTrack.get(id);
+      if (!id || !targetTrack || targetTrack === track) continue;
+      const targetKey = keys[targetTrack];
+      if (!row[targetKey]) row[targetKey] = id;
+      row[key] = null;
+    }
   }
 
   for (const track of [TRACK.MAIN, TRACK.SECONDARY]) {
@@ -118,6 +135,5 @@ export function reconcileLevelArray(value, classes) {
     }
   }
 
-  while (levels.length && !levels.at(-1).mainClassId && !levels.at(-1).secondaryClassId) levels.pop();
   return normalizeLevelArray(levels);
 }

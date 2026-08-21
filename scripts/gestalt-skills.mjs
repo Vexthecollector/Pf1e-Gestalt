@@ -97,7 +97,10 @@ function levelRanks(
   const perLevel = Number(item.system?.skillsPerLevel) || 0;
   const hd = Math.max(0, Number(hitDice) || 0);
   const adventure = Math.max(1, perLevel + (Number(intMod) || 0)) * hd;
-  const background = useBackgroundSkills && backgroundClasses.includes(subtype)
+  const grantsBackgroundRanks = typeof backgroundClasses?.has === "function"
+    ? backgroundClasses.has(subtype)
+    : backgroundClasses?.includes?.(subtype) === true;
+  const background = useBackgroundSkills && grantsBackgroundRanks
     ? Math.max(0, Number(backgroundPerLevel) || 0) * hd
     : 0;
   return { adventure, background, favored };

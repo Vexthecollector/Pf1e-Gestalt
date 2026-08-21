@@ -84,6 +84,17 @@ test("dropping onto an empty slot moves the class", () => {
   );
 });
 
+test("compacts a fully empty row created by a move", () => {
+  const levels = [
+    { level: 1, mainClassId: "fighter", secondaryClassId: null },
+    { level: 2, mainClassId: null, secondaryClassId: "wizard" },
+  ];
+  assert.deepEqual(
+    swapLevelAssignments(levels, { index: 0, track: "main" }, { index: 1, track: "main" }),
+    [{ level: 1, mainClassId: "fighter", secondaryClassId: "wizard" }],
+  );
+});
+
 test("rejects swaps between main and secondary tracks", () => {
   const levels = [
     { level: 1, mainClassId: "fighter", secondaryClassId: "wizard" },
@@ -128,6 +139,24 @@ test("removes the last matching slot when a class loses a level", () => {
     [
       { level: 1, mainClassId: "fighter", secondaryClassId: "wizard" },
       { level: 2, mainClassId: "rogue", secondaryClassId: "wizard" },
+    ],
+  );
+});
+
+test("keeps a class in the same row when its track changes", () => {
+  const levels = [
+    { level: 1, mainClassId: "rogue", secondaryClassId: "wizard" },
+    { level: 2, mainClassId: "fighter", secondaryClassId: null },
+  ];
+  assert.deepEqual(
+    reconcileLevelArray(levels, [
+      cls("rogue", 1, "main"),
+      cls("fighter", 1, "secondary"),
+      cls("wizard", 1, "secondary"),
+    ]),
+    [
+      { level: 1, mainClassId: "rogue", secondaryClassId: "wizard" },
+      { level: 2, mainClassId: null, secondaryClassId: "fighter" },
     ],
   );
 });
